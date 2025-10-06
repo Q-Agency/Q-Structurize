@@ -1,0 +1,10 @@
+---
+alwaysApply: true
+---
+Use Python and FastApi.
+Always use the latest versions.
+I will run this on remote Ubuntu machine that has H200 NVidia GPU.
+I will run this on Docker.
+
+I want to go step by step.
+Separate the components into logical groups and keep it nicely documented.

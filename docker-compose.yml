@@ -1,0 +1,10 @@
+services:
+  q-structurize:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads
+    environment:
+      - PYTHONPATH=/app
+    restart: unless-stopped
