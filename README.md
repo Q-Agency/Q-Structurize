@@ -63,13 +63,62 @@ PDF optimization completed - Original: 265487 bytes, Optimized: 371796 bytes, Re
 
 ### Docker Deployment (Recommended)
 
-1. Build and run with Docker Compose:
+#### Prerequisites
+- Docker and Docker Compose installed
+- Git (to clone the repository)
+
+#### Installation Steps
+
+1. **Clone the repository:**
 ```bash
-docker-compose up --build -d
+git clone https://github.com/Q-Agency/Q-Structurize.git
+cd QStructurize
 ```
 
-2. Access the API at `http://localhost:8000`
-3. View API documentation at `http://localhost:8000/docs`
+2. **Build and run with Docker Compose:**
+```bash
+# Build and start the service in detached mode
+docker-compose up --build -d
+
+# Check if the service is running
+docker-compose ps
+```
+
+3. **Verify the service is running:**
+```bash
+# Check logs
+docker-compose logs -f
+
+# Test the health endpoint
+curl http://localhost:8000/
+```
+
+4. **Access the API:**
+- **API Base URL**: `http://localhost:8000`
+- **Interactive Documentation**: `http://localhost:8000/docs`
+- **Alternative Documentation**: `http://localhost:8000/redoc`
+
+#### Docker Commands Reference
+
+```bash
+# Start the service
+docker-compose up -d
+
+# Stop the service
+docker-compose down
+
+# View logs
+docker-compose logs -f
+
+# Restart the service
+docker-compose restart
+
+# Rebuild and restart
+docker-compose up --build -d
+
+# Check service status
+docker-compose ps
+```
 
 ### Local Development
 
