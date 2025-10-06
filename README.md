@@ -90,13 +90,13 @@ docker-compose ps
 docker-compose logs -f
 
 # Test the health endpoint
-curl http://localhost:8000/
+curl http://localhost:8878/
 ```
 
 4. **Access the API:**
-- **API Base URL**: `http://localhost:8000`
-- **Interactive Documentation**: `http://localhost:8000/docs`
-- **Alternative Documentation**: `http://localhost:8000/redoc`
+- **API Base URL**: `http://localhost:8878`
+- **Interactive Documentation**: `http://localhost:8878/docs`
+- **Alternative Documentation**: `http://localhost:8878/redoc`
 
 #### Docker Commands Reference
 
@@ -136,21 +136,21 @@ python main.py
 
 ### Basic PDF Optimization
 ```bash
-curl -X POST "http://localhost:8000/parse/file" \
+curl -X POST "http://localhost:8878/parse/file" \
   -F "file=@document.pdf" \
   -F "optimize_pdf=true"
 ```
 
 ### Skip Optimization
 ```bash
-curl -X POST "http://localhost:8000/parse/file" \
+curl -X POST "http://localhost:8878/parse/file" \
   -F "file=@document.pdf" \
   -F "optimize_pdf=false"
 ```
 
 ### Health Check
 ```bash
-curl -X GET "http://localhost:8000/"
+curl -X GET "http://localhost:8878/"
 ```
 
 ## Architecture
@@ -195,7 +195,7 @@ QStructurize/
 ### Docker Environment
 - **Base Image**: Python 3.11-slim
 - **Target Platform**: Ubuntu with H200 GPU support
-- **Port**: 8000
+- **Port**: 8878
 - **Volume Mount**: `./uploads:/app/uploads`
 
 ### Logging
