@@ -1,2 +1,2 @@
 # Q-Structurize
-Create structured chunks ready for Rag
+Upload PDF and create structured chunks ready for Rag.
