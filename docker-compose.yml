@@ -2,7 +2,7 @@ services:
   q-structurize:
     build: .
     ports:
-      - "8000:8000"
+      - "8878:8000"
     volumes:
       - ./uploads:/app/uploads
     environment:
