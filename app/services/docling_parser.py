@@ -41,44 +41,41 @@ class DoclingParser:
             return
 
         try:
-            # Debug cache directories
-            logger.info("=== CACHE DEBUG INFO ===")
+            # Log environment variables (should be set by Dockerfile)
+            logger.info("=== CACHE CONFIGURATION ===")
             logger.info(f"HF_HOME: {os.environ.get('HF_HOME', 'Not set')}")
+            logger.info(f"HF_HUB_CACHE: {os.environ.get('HF_HUB_CACHE', 'Not set')}")
             logger.info(f"TRANSFORMERS_CACHE: {os.environ.get('TRANSFORMERS_CACHE', 'Not set')}")
             logger.info(f"TORCH_HOME: {os.environ.get('TORCH_HOME', 'Not set')}")
             
-            # Check if cache directories exist
-            cache_dirs = ['/app/.cache', '/root/.cache']
-            for cache_dir in cache_dirs:
-                if os.path.exists(cache_dir):
-                    logger.info(f"Cache directory exists: {cache_dir}")
-                    # List contents
-                    try:
-                        contents = os.listdir(cache_dir)
-                        logger.info(f"Cache contents in {cache_dir}: {contents}")
-                    except:
-                        logger.info(f"Could not list contents of {cache_dir}")
+            # Verify cache directories exist (should be created by Dockerfile)
+            cache_dirs = {
+                'HF_HOME': os.environ.get('HF_HOME', '/app/.cache/huggingface'),
+                'HF_HUB_CACHE': os.environ.get('HF_HUB_CACHE', '/app/.cache/huggingface/hub'),
+                'TRANSFORMERS_CACHE': os.environ.get('TRANSFORMERS_CACHE', '/app/.cache/transformers'),
+                'TORCH_HOME': os.environ.get('TORCH_HOME', '/app/.cache/torch')
+            }
+            
+            for name, path in cache_dirs.items():
+                if os.path.exists(path):
+                    logger.info(f"✅ {name} exists: {path}")
                 else:
-                    logger.info(f"Cache directory does not exist: {cache_dir}")
+                    logger.warning(f"⚠️  {name} does not exist: {path}")
+                    # Create if missing (fallback)
+                    os.makedirs(path, exist_ok=True)
+                    logger.info(f"✅ Created {name}: {path}")
             
-            # Force cache directories to be used by setting them explicitly
-            os.environ['HF_HOME'] = '/app/.cache/huggingface'
-            os.environ['TRANSFORMERS_CACHE'] = '/app/.cache/transformers'
-            os.environ['TORCH_HOME'] = '/app/.cache/torch'
-            os.environ['HF_HUB_CACHE'] = '/app/.cache/huggingface'
-            
-            # Create cache directories if they don't exist
-            for cache_dir in ['/app/.cache/huggingface', '/app/.cache/transformers', '/app/.cache/torch']:
-                os.makedirs(cache_dir, exist_ok=True)
-                logger.info(f"Created cache directory: {cache_dir}")
-            
-            # Get base VLM options
+            # Get Granite-Docling VLM options
+            logger.info("=== MODEL CONFIGURATION ===")
             vlm_options = vlm_model_specs.GRANITEDOCLING_TRANSFORMERS
             
-            # Optimize for H200 GPU performance
-            logger.info("Configuring VLM for H200 GPU optimization...")
+            # Log model info
+            model_repo = getattr(vlm_options, 'repo_id', 'ibm-granite/granite-docling-258M')
+            logger.info(f"📦 Model: {model_repo}")
+            logger.info(f"🎯 VLM: Granite-Docling (258M parameters)")
             
-            # Override settings for high-end GPU performance
+            # Optimize for H200 GPU performance
+            logger.info("=== H200 GPU OPTIMIZATIONS ===")
             vlm_options.load_in_8bit = False  # Use full precision on H200 (80GB VRAM)
             vlm_options.max_new_tokens = 32768  # Increase token limit for H200
             vlm_options.temperature = 0.0  # Deterministic output
@@ -89,9 +86,14 @@ class DoclingParser:
             if hasattr(vlm_options, 'torch_dtype'):
                 vlm_options.torch_dtype = 'float16'  # Use FP16 for speed on H200
             
-            # Use GraniteDocling VLM with H200 optimizations
-            logger.info("Initializing DocumentConverter with H200 optimizations...")
-            logger.info("⏳ Loading VLM model (this should be fast if pre-cached)...")
+            logger.info(f"✅ Load in 8-bit: {vlm_options.load_in_8bit}")
+            logger.info(f"✅ Max tokens: {vlm_options.max_new_tokens}")
+            logger.info(f"✅ KV cache: {vlm_options.use_kv_cache}")
+            logger.info(f"✅ Precision: FP16" if hasattr(vlm_options, 'torch_dtype') else "✅ Precision: Default")
+            
+            # Initialize DocumentConverter
+            logger.info("=== INITIALIZING VLM ===")
+            logger.info("⏳ Loading Granite-Docling VLM model (should be fast if pre-cached)...")
             
             # Track initialization time
             init_start = time.time()
@@ -106,22 +108,26 @@ class DoclingParser:
             )
             
             init_time = time.time() - init_start
-            logger.info(f"✅ Docling VLM converter initialized successfully in {init_time:.2f} seconds")
-            logger.info("✅ Model loaded from cache - no download required")
-            logger.info(f"H200 Config: load_in_8bit={vlm_options.load_in_8bit}, max_tokens={vlm_options.max_new_tokens}, kv_cache={vlm_options.use_kv_cache}")
+            logger.info(f"✅ Granite-Docling VLM initialized in {init_time:.2f} seconds")
+            logger.info("✅ Model loaded from cache - ready for processing")
             
-            # Check cache after initialization
-            logger.info("=== POST-INITIALIZATION CACHE CHECK ===")
-            for cache_dir in cache_dirs:
-                if os.path.exists(cache_dir):
-                    try:
-                        contents = os.listdir(cache_dir)
-                        logger.info(f"Cache contents after init in {cache_dir}: {contents}")
-                    except:
-                        logger.info(f"Could not list contents of {cache_dir}")
+            # Verify cache was used
+            logger.info("=== POST-INITIALIZATION CHECK ===")
+            hub_cache = os.environ.get('HF_HUB_CACHE', '/app/.cache/huggingface/hub')
+            if os.path.exists(hub_cache):
+                try:
+                    # Check for granite model
+                    import glob
+                    granite_models = glob.glob(os.path.join(hub_cache, '*granite*docling*'))
+                    if granite_models:
+                        logger.info(f"✅ Found Granite-Docling in cache: {len(granite_models)} location(s)")
+                    else:
+                        logger.warning("⚠️  Granite-Docling not found in expected cache location")
+                except Exception as e:
+                    logger.warning(f"Could not verify cache: {e}")
 
         except Exception as e:
-            logger.error(f"Failed to initialize Docling VLM converter: {str(e)}")
+            logger.error(f"Failed to initialize Granite-Docling VLM converter: {str(e)}")
             self.converter = None
     
     def parse_pdf(self, pdf_content: bytes) -> Dict[str, Any]:
@@ -144,7 +150,7 @@ class DoclingParser:
         if not self.converter:
             return {
                 "success": False,
-                "error": "Docling converter not initialized",
+                "error": "Granite-Docling VLM converter not initialized",
                 "content": None
             }
         
@@ -154,8 +160,8 @@ class DoclingParser:
                 tmp_file.write(pdf_content)
                 tmp_file.flush()
                 
-                # Parse the PDF using optimized Docling VLM
-                logger.info("Starting PDF parsing with H200-optimized GraniteDocling VLM")
+                # Parse the PDF using Granite-Docling VLM
+                logger.info("Starting PDF parsing with H200-optimized Granite-Docling VLM")
                 logger.info("⏳ Processing document (VLM inference in progress)...")
                 
                 # Track processing time
@@ -178,7 +184,7 @@ class DoclingParser:
                 }
                 
         except Exception as e:
-            logger.error(f"Error during PDF parsing with H200-optimized Docling VLM: {str(e)}")
+            logger.error(f"Error during PDF parsing with H200-optimized Granite-Docling VLM: {str(e)}")
             return {
                 "success": False,
                 "error": str(e),
@@ -186,20 +192,20 @@ class DoclingParser:
             }
     
     def is_available(self) -> bool:
-        """Check if Docling VLM parsing is available."""
+        """Check if Granite-Docling VLM parsing is available."""
         return DOCLING_AVAILABLE and self.converter is not None
 
     def get_parser_info(self) -> Dict[str, Any]:
-        """Get information about the H200-optimized Docling VLM parser."""
+        """Get information about the H200-optimized Granite-Docling VLM parser."""
         return {
             "available": self.is_available(),
             "library": "docling" if DOCLING_AVAILABLE else None,
-            "model": "granite_docling_h200_optimized" if self.is_available() else None,
-            "description": "High-precision PDF parsing using GraniteDocling VLM optimized for H200 GPU",
+            "model": "granite-docling-258M" if self.is_available() else None,
+            "description": "High-precision PDF parsing using Granite-Docling VLM (258M) optimized for H200 GPU",
             "features": [
-                "Visual Language Model processing",
+                "Vision Language Model processing",
                 "H200 GPU optimization (80GB VRAM)",
-                "Full precision processing (no quantization)",
+                "Full precision processing (FP16)",
                 "Extended token limits (32K tokens)",
                 "KV cache acceleration",
                 "Structured markdown output",
@@ -208,6 +214,7 @@ class DoclingParser:
             "performance": {
                 "expected_speed": "2-5 seconds per page",
                 "memory_usage": "8-16GB VRAM",
-                "optimization": "H200-specific"
+                "optimization": "H200-specific",
+                "model": "ibm-granite/granite-docling-258M"
             }
         }

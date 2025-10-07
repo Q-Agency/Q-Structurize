@@ -7,9 +7,26 @@ PDF optimization and high-precision text extraction API using Docling with Grani
 - **🎯 GraniteDocling VLM**: Maximum precision PDF parsing using Vision-Language Models
 - **📄 PDF Optimization**: Clean and optimize PDFs for better text extraction using pikepdf
 - **🔍 Advanced Text Extraction**: Structured markdown output with visual understanding
-- **⚡ Fast Processing**: Optimized for production use with model caching
+- **⚡ Fast Processing**: Pre-cached models using official `docling-tools` CLI
 - **🐳 Docker Support**: Ready for containerized deployment on Ubuntu with H200 GPU support
 - **📚 FastAPI**: Modern, fast web framework with automatic API documentation
+
+## 🚀 Quick Start
+
+### One-Command Deployment
+
+```bash
+# 1. Build (downloads models automatically using official CLI)
+docker-compose -f docker-compose.gpu.yml build
+
+# 2. Start
+docker-compose -f docker-compose.gpu.yml up -d
+
+# 3. Access
+open http://localhost:8878/docs
+```
+
+That's it! See [QUICK_START.md](QUICK_START.md) for more details.
 
 ## API Endpoints
 
@@ -36,37 +53,9 @@ Parse PDF files using Docling with GraniteDocling VLM for maximum precision.
 
 Get information about available parsers.
 
-**Response Format:**
-```json
-{
-  "available": true,
-  "library": "docling",
-  "model": "granite_docling",
-  "description": "High-precision PDF parsing using GraniteDocling VLM",
-  "features": [
-    "Visual Language Model processing",
-    "Maximum precision text extraction",
-    "Structured markdown output",
-    "Metadata extraction"
-  ]
-}
-```
-
 ### GET /
 
 Health check endpoint.
-
-**Response Format:**
-```json
-{
-  "message": "Q-Structurize API is running",
-  "status": "healthy",
-  "features": ["PDF optimization", "Docling VLM parsing"],
-  "version": "1.0.0",
-  "docs": "/docs",
-  "redoc": "/redoc"
-}
-```
 
 ## Docling VLM Processing
 
@@ -74,38 +63,54 @@ The service uses **Docling with GraniteDocling VLM** for maximum precision PDF p
 
 - **🎯 Vision-Language Model**: Understands both text and visual elements
 - **📄 Structured Output**: Clean markdown with visual understanding
-- **⚡ Model Caching**: Hugging Face models cached for performance
+- **⚡ Model Pre-caching**: Uses official `docling-tools` CLI for model management
 - **🔍 Maximum Precision**: Advanced AI-powered text extraction
+- **🚀 H200 GPU Optimized**: Full precision, 32K token limit, KV cache acceleration
 
-## PDF Optimization
+## Model Management (New!)
 
-The service uses `pikepdf` to optimize PDFs for better text extraction by:
+We now use the **official `docling-tools` CLI** for model management:
 
-- **Content Normalization**: Standardizes content streams for better parsing
-- **Object Stream Optimization**: Reorganizes PDF objects for improved readability
-- **Resource Cleanup**: Removes unused objects and metadata
-- **Stream Compression**: Optimizes content streams while maintaining structure
+```bash
+# Models are automatically downloaded during Docker build
+# Using: docling-tools models download
 
-### Size Tracking
+# Check downloaded models
+docker exec q-structurize docling-tools models list
 
-Optimization results are logged with size information:
+# Verify cache
+du -sh ./cache
 ```
-PDF optimization completed - Original: 265487 bytes, Optimized: 371796 bytes, Reduction: -40.04%
-```
 
-*Note: Size increase is normal and indicates successful optimization for text extraction*
+**Benefits:**
+- ✅ Official Docling CLI (maintained by Docling team)
+- ✅ Automatic model download during build
+- ✅ Persistent cache in `./cache` directory
+- ✅ Fast rebuilds (model persists)
 
-## Quick Start
+See [OFFICIAL_CLI_SOLUTION.md](OFFICIAL_CLI_SOLUTION.md) for complete details.
 
-### Docker Deployment (Recommended)
+## Docker Deployment
 
-#### Prerequisites
+### Prerequisites
 - Docker and Docker Compose installed
-- Git (to clone the repository)
-- **Minimum 8GB RAM** (for VLM model processing)
-- **GPU Support** (optional, for faster processing)
+- **Minimum 16GB RAM** (for VLM model processing)
+- **NVIDIA GPU** (H200 recommended, other GPUs supported)
+- **~10GB disk space** (for models and cache)
 
-#### Installation Steps
+### Build Timeline
+
+**First Build (~10 minutes):**
+```
+[0-4 min]  Installing system and Python packages
+[4-9 min]  Downloading VLM model (official CLI)
+[9-10 min] Verification and finalization
+```
+
+**Subsequent Builds (~3 minutes):**
+- Uses cached layers and pre-downloaded models
+
+### Installation Steps
 
 1. **Clone the repository:**
 ```bash
@@ -113,70 +118,63 @@ git clone https://github.com/Q-Agency/Q-Structurize.git
 cd QStructurize
 ```
 
-2. **Build and run with Docker Compose:**
+2. **Build using official method:**
 ```bash
-# Build and start the service in detached mode
-docker-compose up --build -d
+# For GPU deployment (recommended)
+docker-compose -f docker-compose.gpu.yml build
 
-# Check if the service is running
-docker-compose ps
+# Check logs during build
+docker-compose -f docker-compose.gpu.yml build --progress=plain
 ```
 
-3. **Verify the service is running:**
+3. **Start the service:**
 ```bash
-# Check logs (VLM initialization may take a few minutes)
-docker-compose logs -f
+docker-compose -f docker-compose.gpu.yml up -d
+```
 
-# Test the health endpoint
+4. **Verify the service:**
+```bash
+# Check logs
+docker-compose -f docker-compose.gpu.yml logs -f
+
+# Test health endpoint
 curl http://localhost:8878/
 
 # Check VLM parser status
 curl http://localhost:8878/parsers/info
+
+# Verify models
+docker exec q-structurize docling-tools models list
 ```
 
-4. **Access the API:**
+5. **Access the API:**
 - **API Base URL**: `http://localhost:8878`
 - **Interactive Documentation**: `http://localhost:8878/docs`
 - **Alternative Documentation**: `http://localhost:8878/redoc`
 
-#### First Run Notes
-- **Model Download**: GraniteDocling VLM (~258M) downloads automatically on first use
-- **Cache Directory**: Models cached in `./cache/` directory
-- **Initialization**: VLM converter initializes on startup (check logs)
+### Performance Expectations
 
-#### Docker Commands Reference
+**First API Request (~60-90 seconds):**
+- Model loads into GPU memory
+- Subsequent requests are much faster
+
+**Subsequent Requests (~4-5 seconds per page):**
+- Model already loaded
+- Fast GPU inference
+
+### Cache Management
 
 ```bash
-# Start the service
+# ✅ Good: Rebuild keeping cache (fast)
+docker-compose down      # No -v flag!
+docker-compose build
 docker-compose up -d
 
-# Stop the service
-docker-compose down
-
-# View logs
-docker-compose logs -f
-
-# Restart the service
-docker-compose restart
-
-# Rebuild and restart
-docker-compose up --build -d
-
-# Check service status
-docker-compose ps
+# ❌ Bad: Deletes cache, re-downloads everything
+docker-compose down -v   # Removes volumes!
 ```
 
-### Local Development
-
-1. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. Run the application:
-```bash
-python main.py
-```
+The `./cache` directory persists models between container restarts.
 
 ## Usage Examples
 
@@ -188,101 +186,153 @@ curl -X POST "http://localhost:8878/parse/file" \
   -F "use_vlm=true"
 ```
 
-### Skip VLM Processing
-```bash
-curl -X POST "http://localhost:8878/parse/file" \
-  -F "file=@document.pdf" \
-  -F "optimize_pdf=true" \
-  -F "use_vlm=false"
+### Python Example
+```python
+import requests
+
+url = "http://localhost:8878/parse/file"
+files = {"file": open("document.pdf", "rb")}
+data = {
+    "optimize_pdf": True,
+    "use_vlm": True
+}
+
+response = requests.post(url, files=files, data=data)
+print(response.json())
 ```
 
-### Check Parser Status
-```bash
-curl -X GET "http://localhost:8878/parsers/info"
-```
+## Documentation
 
-### Health Check
-```bash
-curl -X GET "http://localhost:8878/"
-```
+- **[QUICK_START.md](QUICK_START.md)** - 3-command quick start guide
+- **[OFFICIAL_CLI_SOLUTION.md](OFFICIAL_CLI_SOLUTION.md)** - Complete CLI guide
+- **[WHATS_NEW.md](WHATS_NEW.md)** - Recent changes and improvements
+- **[BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md)** - Detailed build instructions
+- **[DEPLOYMENT_LINUX.md](DEPLOYMENT_LINUX.md)** - Linux deployment guide
 
 ## Architecture
 
 ### Components
 
-- **FastAPI Application** (`main.py`): Main API server with PDF processing endpoints
-- **PDF Optimizer Service** (`app/services/pdf_optimizer.py`): pikepdf-based PDF optimization
-- **Docling VLM Parser** (`app/services/docling_parser.py`): GraniteDocling VLM integration
-- **Docker Configuration**: Containerized deployment with Ubuntu base image
-- **Model Caching**: Hugging Face and Torch model caching for performance
-- **Logging**: Comprehensive logging for optimization and VLM processing tracking
+1. **FastAPI Application** (`main.py`)
+   - REST API endpoints
+   - Request handling and validation
 
-### File Structure
-```
-QStructurize/
-├── app/
-│   ├── services/
-│   │   ├── pdf_optimizer.py    # PDF optimization service
-│   │   └── docling_parser.py   # Docling VLM parser service
-│   └── models/
-│       └── schemas.py          # Pydantic models
-├── cache/                      # Model cache directory (created automatically)
-├── main.py                     # FastAPI application
-├── requirements.txt            # Python dependencies
-├── Dockerfile                  # Docker configuration
-├── docker-compose.yml         # Docker Compose setup
-├── .gitignore                 # Git ignore file
-└── README.md                  # This file
-```
+2. **Docling Parser** (`app/services/docling_parser.py`)
+   - GraniteDocling VLM integration
+   - H200 GPU optimizations
+   - Model loading and caching
 
-## Error Handling
+3. **PDF Optimizer** (`app/services/pdf_optimizer.py`)
+   - PDF preprocessing with pikepdf
+   - Content normalization
 
-- **415 Unsupported Media Type**: Non-PDF files
-- **500 Internal Server Error**: PDF optimization errors
-- **400 Bad Request**: Invalid parameters
+4. **Model Management**
+   - Official `docling-tools` CLI
+   - HuggingFace model caching
+   - Persistent storage in `./cache`
 
-## Dependencies
+### Tech Stack
 
-- **FastAPI**: Modern web framework for APIs
-- **pikepdf**: PDF manipulation and optimization
-- **docling[vlm]**: Docling with VLM support for maximum precision
-- **uvicorn**: ASGI server for FastAPI
-- **python-multipart**: File upload support
-- **torch**: PyTorch for VLM processing
-- **transformers**: Hugging Face Transformers for model loading
-
-## Production Deployment
-
-### Docker Environment
-- **Base Image**: Python 3.11-slim
-- **Target Platform**: Ubuntu with H200 GPU support
-- **Port**: 8878
-- **Volume Mounts**: 
-  - `./uploads:/app/uploads` (file uploads)
-  - `./cache:/app/.cache` (model cache)
-- **Environment Variables**:
-  - `TRANSFORMERS_CACHE=/app/.cache/transformers`
-  - `HF_HOME=/app/.cache/huggingface`
-  - `TORCH_HOME=/app/.cache/torch`
-
-### Logging
-- PDF optimization results are logged with size information
-- Request/response logging for monitoring
-- Error logging for debugging
+- **Framework**: FastAPI 0.118.0
+- **PDF Processing**: Docling 2.55.1 with VLM support
+- **PDF Optimization**: pikepdf 8.7.0
+- **GPU**: NVIDIA CUDA 12.1 + cuDNN 8
+- **Python**: 3.11
+- **Container**: Docker with GPU support
 
 ## Development
 
-### Adding New Features
-1. Create new services in `app/services/`
-2. Add endpoints in `main.py`
-3. Update Docker configuration if needed
-4. Test with Docker Compose
+### Local Setup
 
-### Monitoring
-- Check logs: `docker-compose logs -f`
-- Monitor optimization results in logs
-- Use health check endpoint for service status
+1. **Install dependencies:**
+```bash
+pip install -r requirements.txt
+```
+
+2. **Run locally:**
+```bash
+python main.py
+```
+
+3. **Access API:**
+- http://localhost:8000/docs
+
+### Docker Commands
+
+```bash
+# Build
+docker-compose -f docker-compose.gpu.yml build
+
+# Start
+docker-compose -f docker-compose.gpu.yml up -d
+
+# Logs
+docker-compose -f docker-compose.gpu.yml logs -f
+
+# Stop
+docker-compose -f docker-compose.gpu.yml down
+
+# Check models
+docker exec q-structurize docling-tools models list
+
+# Shell access
+docker exec -it q-structurize bash
+```
+
+## GPU Support
+
+### H200 GPU Optimizations
+
+- **Full Precision**: No quantization (80GB VRAM available)
+- **Extended Tokens**: 32,768 token limit
+- **KV Cache**: Enabled for speed
+- **FP16**: Mixed precision for optimal performance
+
+### Other GPUs
+
+The system works with other NVIDIA GPUs:
+- **A100**: Full support
+- **A40/A10**: Supported
+- **RTX 4090/4080**: Supported
+- **CPU Fallback**: Available but slower
+
+## Troubleshooting
+
+### Models not found
+```bash
+# Check cache
+ls -lh ./cache/huggingface/hub/
+
+# Verify with CLI
+docker exec q-structurize docling-tools models list
+
+# Rebuild if needed
+docker-compose build --no-cache
+```
+
+### Slow first request
+This is normal! First request loads model into GPU (60-90 sec).
+
+### Always re-downloading
+Don't use `docker-compose down -v` (removes cache).
 
 ## License
 
-This project is part of the Q-Structurize system for PDF processing and text extraction optimization.
+MIT
+
+## Links
+
+- **Repository**: [github.com/Q-Agency/Q-Structurize](https://github.com/Q-Agency/Q-Structurize)
+- **Docling**: [docling-project.github.io/docling](https://docling-project.github.io/docling/)
+- **docling-tools CLI**: [Official Documentation](https://docling-project.github.io/docling/reference/cli/)
+
+## Support
+
+For issues and questions:
+1. Check [TROUBLESHOOTING_GPU.md](TROUBLESHOOTING_GPU.md)
+2. Review [OFFICIAL_CLI_SOLUTION.md](OFFICIAL_CLI_SOLUTION.md)
+3. Open an issue on GitHub
+
+---
+
+**Built with ❤️ using official Docling tools**

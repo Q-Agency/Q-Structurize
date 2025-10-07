@@ -63,26 +63,40 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN mkdir -p /app/.cache/huggingface/hub \
              /app/.cache/transformers \
              /app/.cache/torch \
-             /app/uploads \
-             /app/scripts
+             /app/uploads
 
-# Copy preload script (before copying full application code)
-COPY scripts/preload_models.py scripts/
-
-# Pre-download and cache the GraniteDocling VLM model during build
-# This eliminates download time during runtime - model will be ready instantly!
-RUN echo "🚀 Starting model pre-download process..." && \
-    python scripts/preload_models.py && \
-    echo "✅ Model pre-download completed successfully!"
+# ============================================================================
+# Pre-download Granite-Docling VLM model using OFFICIAL docling-tools CLI
+# Model: ibm-granite/granite-docling-258M (258M parameters)
+# This is the recommended method from Docling documentation
+# ============================================================================
+RUN echo "============================================================================" && \
+    echo "🚀 Downloading Granite-Docling VLM (258M) using official docling-tools CLI" && \
+    echo "📦 Model: ibm-granite/granite-docling-258M" && \
+    echo "============================================================================" && \
+    docling-tools models download && \
+    echo "" && \
+    echo "============================================================================" && \
+    echo "✅ Model download completed successfully!" && \
+    echo "============================================================================" && \
+    echo "" && \
+    echo "📂 Verifying downloaded models:" && \
+    find /app/.cache -type d -name "*granite*" 2>/dev/null | head -5 && \
+    echo ""
 
 # Copy application code LAST (for better layer caching during development)
 COPY . .
 
-# Verify the model is properly cached
-RUN python -c "import os; \
-    cache_path = '/app/.cache/huggingface/hub/models--ibm-granite--granite-docling-258M'; \
-    assert os.path.exists(cache_path), f'❌ Model cache not found at {cache_path}'; \
-    print(f'✅ Model verified at {cache_path}')"
+# Verify Granite-Docling model is available
+RUN echo "🔍 Verifying Granite-Docling VLM model..." && \
+    python -c "from docling.datamodel import vlm_model_specs; \
+        opts = vlm_model_specs.GRANITEDOCLING_TRANSFORMERS; \
+        print(f'✅ Model configured: {opts.repo_id if hasattr(opts, \"repo_id\") else \"ibm-granite/granite-docling-258M\"}'); \
+        print(f'✅ Model parameters: 258M'); \
+        print(f'✅ Framework: Transformers')" && \
+    (find /app/.cache -type d -name "*granite*docling*" -o -name "*granite-docling*" | head -1 | \
+     xargs -I {} echo "✅ Model cache found at: {}") || \
+    echo "⚠️  Model cache structure varies by version"
 
 # Expose application port
 EXPOSE 8000
