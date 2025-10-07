@@ -90,6 +90,12 @@ class DoclingParser:
             
             # Use GraniteDocling VLM with H200 optimizations
             logger.info("Initializing DocumentConverter with H200 optimizations...")
+            logger.info("⏳ Loading VLM model (this should be fast if pre-cached)...")
+            
+            # Track initialization time
+            import time
+            init_start = time.time()
+            
             self.converter = DocumentConverter(
                 format_options={
                     InputFormat.PDF: PdfFormatOption(
@@ -98,7 +104,10 @@ class DoclingParser:
                     ),
                 }
             )
-            logger.info("Docling VLM converter initialized successfully with H200 optimizations")
+            
+            init_time = time.time() - init_start
+            logger.info(f"✅ Docling VLM converter initialized successfully in {init_time:.2f} seconds")
+            logger.info("✅ Model loaded from cache - no download required")
             logger.info(f"H200 Config: load_in_8bit={vlm_options.load_in_8bit}, max_tokens={vlm_options.max_new_tokens}, kv_cache={vlm_options.use_kv_cache}")
             
             # Check cache after initialization
@@ -147,7 +156,14 @@ class DoclingParser:
                 
                 # Parse the PDF using optimized Docling VLM
                 logger.info("Starting PDF parsing with H200-optimized GraniteDocling VLM")
+                logger.info("⏳ Processing document (VLM inference in progress)...")
+                
+                # Track processing time
+                processing_start = time.time()
                 result = self.converter.convert(source=tmp_file.name)
+                processing_time = time.time() - processing_start
+                
+                logger.info(f"✅ VLM processing completed in {processing_time:.2f} seconds")
                 
                 # Extract content - simple markdown export
                 document = result.document

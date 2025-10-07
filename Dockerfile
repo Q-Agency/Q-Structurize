@@ -34,8 +34,22 @@ ENV CUDA_VISIBLE_DEVICES=0
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Create cache directories for model storage
+RUN mkdir -p /app/.cache/huggingface /app/.cache/transformers /app/.cache/torch
+
+# Set environment variables for model caching
+ENV HF_HOME=/app/.cache/huggingface
+ENV TRANSFORMERS_CACHE=/app/.cache/transformers
+ENV TORCH_HOME=/app/.cache/torch
+ENV HF_HUB_CACHE=/app/.cache/huggingface
+
 # Copy application code
 COPY . .
+
+# Pre-download and cache the GraniteDocling VLM model during build
+# This eliminates the "black box" download time during runtime
+RUN echo "🚀 Pre-downloading GraniteDocling VLM model..." && \
+    python scripts/preload_models.py
 
 # Expose port
 EXPOSE 8000
