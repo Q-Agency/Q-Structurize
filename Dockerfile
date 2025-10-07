@@ -9,13 +9,13 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     # Tokenizers - disable parallelism to avoid fork warnings
-    TOKENIZERS_PARALLELISM=false \
+    TOKENIZERS_PARALLELISM=true \
     # CPU threading optimizations for 2x Xeon 6960P (144 cores total)
-    OMP_NUM_THREADS=40 \
-    MKL_NUM_THREADS=40 \
-    OPENBLAS_NUM_THREADS=40 \
-    NUMEXPR_NUM_THREADS=40 \
-    TORCH_NUM_THREADS=40 \
+    OMP_NUM_THREADS=80 \
+    MKL_NUM_THREADS=80 \
+    OPENBLAS_NUM_THREADS=80 \
+    NUMEXPR_NUM_THREADS=80 \
+    TORCH_NUM_THREADS=80 \
     # CPU-specific optimizations for Intel Xeon
     KMP_BLOCKTIME=1 \
     KMP_SETTINGS=1 \
