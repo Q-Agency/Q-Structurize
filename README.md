@@ -1,31 +1,54 @@
 # Q-Structurize
 
-PDF optimization and text extraction API for preparing documents for RAG (Retrieval-Augmented Generation).
+PDF optimization and high-precision text extraction API using Docling with GraniteDocling VLM for maximum accuracy.
 
 ## Features
 
-- **PDF Optimization**: Clean and optimize PDFs for better text extraction using pikepdf
-- **Text Extraction Ready**: Prepare PDFs for downstream text extraction tools
-- **Size Tracking**: Monitor file size changes during optimization
-- **Docker Support**: Ready for containerized deployment on Ubuntu with H200 GPU support
-- **FastAPI**: Modern, fast web framework with automatic API documentation
+- **🎯 GraniteDocling VLM**: Maximum precision PDF parsing using Vision-Language Models
+- **📄 PDF Optimization**: Clean and optimize PDFs for better text extraction using pikepdf
+- **🔍 Advanced Text Extraction**: Structured markdown output with visual understanding
+- **⚡ Fast Processing**: Optimized for production use with model caching
+- **🐳 Docker Support**: Ready for containerized deployment on Ubuntu with H200 GPU support
+- **📚 FastAPI**: Modern, fast web framework with automatic API documentation
 
 ## API Endpoints
 
 ### POST /parse/file
 
-Parse and optimize PDF files for text extraction.
+Parse PDF files using Docling with GraniteDocling VLM for maximum precision.
 
 **Parameters:**
 - `file` (required): PDF file upload
 - `max_tokens_per_chunk` (optional, int): Maximum tokens per chunk (reserved for future use, default: 512)
 - `optimize_pdf` (optional, boolean): Whether to optimize PDF for better text extraction (default: true)
+- `use_vlm` (optional, boolean): Whether to use Docling VLM for maximum precision (default: true)
 
 **Response Format:**
 ```json
 {
-  "message": "Document received successfully",
-  "status": "success"
+  "message": "PDF parsed successfully using Docling VLM",
+  "status": "success",
+  "content": "# Document Title\n\nStructured markdown content..."
+}
+```
+
+### GET /parsers/info
+
+Get information about available parsers.
+
+**Response Format:**
+```json
+{
+  "available": true,
+  "library": "docling",
+  "model": "granite_docling",
+  "description": "High-precision PDF parsing using GraniteDocling VLM",
+  "features": [
+    "Visual Language Model processing",
+    "Maximum precision text extraction",
+    "Structured markdown output",
+    "Metadata extraction"
+  ]
 }
 ```
 
@@ -37,9 +60,22 @@ Health check endpoint.
 ```json
 {
   "message": "Q-Structurize API is running",
-  "status": "healthy"
+  "status": "healthy",
+  "features": ["PDF optimization", "Docling VLM parsing"],
+  "version": "1.0.0",
+  "docs": "/docs",
+  "redoc": "/redoc"
 }
 ```
+
+## Docling VLM Processing
+
+The service uses **Docling with GraniteDocling VLM** for maximum precision PDF parsing:
+
+- **🎯 Vision-Language Model**: Understands both text and visual elements
+- **📄 Structured Output**: Clean markdown with visual understanding
+- **⚡ Model Caching**: Hugging Face models cached for performance
+- **🔍 Maximum Precision**: Advanced AI-powered text extraction
 
 ## PDF Optimization
 
@@ -66,6 +102,8 @@ PDF optimization completed - Original: 265487 bytes, Optimized: 371796 bytes, Re
 #### Prerequisites
 - Docker and Docker Compose installed
 - Git (to clone the repository)
+- **Minimum 8GB RAM** (for VLM model processing)
+- **GPU Support** (optional, for faster processing)
 
 #### Installation Steps
 
@@ -86,17 +124,25 @@ docker-compose ps
 
 3. **Verify the service is running:**
 ```bash
-# Check logs
+# Check logs (VLM initialization may take a few minutes)
 docker-compose logs -f
 
 # Test the health endpoint
 curl http://localhost:8878/
+
+# Check VLM parser status
+curl http://localhost:8878/parsers/info
 ```
 
 4. **Access the API:**
 - **API Base URL**: `http://localhost:8878`
 - **Interactive Documentation**: `http://localhost:8878/docs`
 - **Alternative Documentation**: `http://localhost:8878/redoc`
+
+#### First Run Notes
+- **Model Download**: GraniteDocling VLM (~258M) downloads automatically on first use
+- **Cache Directory**: Models cached in `./cache/` directory
+- **Initialization**: VLM converter initializes on startup (check logs)
 
 #### Docker Commands Reference
 
@@ -134,18 +180,25 @@ python main.py
 
 ## Usage Examples
 
-### Basic PDF Optimization
+### Basic PDF Parsing with VLM
 ```bash
 curl -X POST "http://localhost:8878/parse/file" \
   -F "file=@document.pdf" \
-  -F "optimize_pdf=true"
+  -F "optimize_pdf=true" \
+  -F "use_vlm=true"
 ```
 
-### Skip Optimization
+### Skip VLM Processing
 ```bash
 curl -X POST "http://localhost:8878/parse/file" \
   -F "file=@document.pdf" \
-  -F "optimize_pdf=false"
+  -F "optimize_pdf=true" \
+  -F "use_vlm=false"
+```
+
+### Check Parser Status
+```bash
+curl -X GET "http://localhost:8878/parsers/info"
 ```
 
 ### Health Check
@@ -159,21 +212,26 @@ curl -X GET "http://localhost:8878/"
 
 - **FastAPI Application** (`main.py`): Main API server with PDF processing endpoints
 - **PDF Optimizer Service** (`app/services/pdf_optimizer.py`): pikepdf-based PDF optimization
+- **Docling VLM Parser** (`app/services/docling_parser.py`): GraniteDocling VLM integration
 - **Docker Configuration**: Containerized deployment with Ubuntu base image
-- **Logging**: Comprehensive logging for optimization tracking
+- **Model Caching**: Hugging Face and Torch model caching for performance
+- **Logging**: Comprehensive logging for optimization and VLM processing tracking
 
 ### File Structure
 ```
 QStructurize/
 ├── app/
 │   ├── services/
-│   │   └── pdf_optimizer.py    # PDF optimization service
+│   │   ├── pdf_optimizer.py    # PDF optimization service
+│   │   └── docling_parser.py   # Docling VLM parser service
 │   └── models/
-│       └── schemas.py           # Pydantic models
+│       └── schemas.py          # Pydantic models
+├── cache/                      # Model cache directory (created automatically)
 ├── main.py                     # FastAPI application
 ├── requirements.txt            # Python dependencies
 ├── Dockerfile                  # Docker configuration
 ├── docker-compose.yml         # Docker Compose setup
+├── .gitignore                 # Git ignore file
 └── README.md                  # This file
 ```
 
@@ -187,8 +245,11 @@ QStructurize/
 
 - **FastAPI**: Modern web framework for APIs
 - **pikepdf**: PDF manipulation and optimization
+- **docling[vlm]**: Docling with VLM support for maximum precision
 - **uvicorn**: ASGI server for FastAPI
 - **python-multipart**: File upload support
+- **torch**: PyTorch for VLM processing
+- **transformers**: Hugging Face Transformers for model loading
 
 ## Production Deployment
 
@@ -196,7 +257,13 @@ QStructurize/
 - **Base Image**: Python 3.11-slim
 - **Target Platform**: Ubuntu with H200 GPU support
 - **Port**: 8878
-- **Volume Mount**: `./uploads:/app/uploads`
+- **Volume Mounts**: 
+  - `./uploads:/app/uploads` (file uploads)
+  - `./cache:/app/.cache` (model cache)
+- **Environment Variables**:
+  - `TRANSFORMERS_CACHE=/app/.cache/transformers`
+  - `HF_HOME=/app/.cache/huggingface`
+  - `TORCH_HOME=/app/.cache/torch`
 
 ### Logging
 - PDF optimization results are logged with size information
