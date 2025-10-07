@@ -21,7 +21,7 @@ try:
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.pipeline.standard_pdf_pipeline import StandardPdfPipeline
-    from docling.pipeline.standard_pdf_pipeline import PdfPipelineOptions, TableFormerMode
+    from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
     DOCLING_AVAILABLE = True
 except ImportError:
     DOCLING_AVAILABLE = False
