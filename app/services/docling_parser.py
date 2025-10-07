@@ -3,6 +3,7 @@
 import tempfile
 import logging
 import os
+import time
 from typing import Optional, Dict, Any
 
 # Try to import docling, set availability flag
@@ -93,7 +94,6 @@ class DoclingParser:
             logger.info("⏳ Loading VLM model (this should be fast if pre-cached)...")
             
             # Track initialization time
-            import time
             init_start = time.time()
             
             self.converter = DocumentConverter(
