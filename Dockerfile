@@ -11,11 +11,12 @@ ENV PYTHONUNBUFFERED=1 \
     # Tokenizers - disable parallelism to avoid fork warnings
     TOKENIZERS_PARALLELISM=true \
     # CPU threading optimizations for 2x Xeon 6960P (144 cores total)
-    OMP_NUM_THREADS=100 \
-    MKL_NUM_THREADS=100 \
-    OPENBLAS_NUM_THREADS=100 \
-    NUMEXPR_NUM_THREADS=100 \
-    TORCH_NUM_THREADS=100 \
+    # 8 workers × 18 threads = 144 total threads (1:1 with cores)
+    OMP_NUM_THREADS=18 \
+    MKL_NUM_THREADS=18 \
+    OPENBLAS_NUM_THREADS=18 \
+    NUMEXPR_NUM_THREADS=18 \
+    TORCH_NUM_THREADS=18 \
     # CPU-specific optimizations for Intel Xeon
     KMP_BLOCKTIME=1 \
     KMP_SETTINGS=1 \
@@ -92,5 +93,5 @@ COPY . .
 EXPOSE 8000
 
 # Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "8"]
 
