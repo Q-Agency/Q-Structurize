@@ -105,6 +105,10 @@ class DoclingParser:
                     ),
                 }
             )
+
+            logger.info("Initializing PDF pipeline only")
+            self.converter.initialize_pipeline(InputFormat.PDF)
+            logger.info("PDF pipeline initialization complete")
             
             init_time = time.time() - init_start
             logger.info(f"✅ StandardPdfPipeline initialized in {init_time:.2f} seconds")
