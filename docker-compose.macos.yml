@@ -15,11 +15,11 @@ services:
       - HF_HUB_CACHE=/app/.cache/huggingface
       - CUDA_VISIBLE_DEVICES=0
     restart: unless-stopped
-    # Enable GPU support for VLM processing on Linux with H200
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    # GPU support disabled for macOS testing
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]

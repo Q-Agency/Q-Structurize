@@ -60,6 +60,17 @@ class DoclingParser:
                 else:
                     logger.info(f"Cache directory does not exist: {cache_dir}")
             
+            # Force cache directories to be used by setting them explicitly
+            os.environ['HF_HOME'] = '/app/.cache/huggingface'
+            os.environ['TRANSFORMERS_CACHE'] = '/app/.cache/transformers'
+            os.environ['TORCH_HOME'] = '/app/.cache/torch'
+            os.environ['HF_HUB_CACHE'] = '/app/.cache/huggingface'
+            
+            # Create cache directories if they don't exist
+            for cache_dir in ['/app/.cache/huggingface', '/app/.cache/transformers', '/app/.cache/torch']:
+                os.makedirs(cache_dir, exist_ok=True)
+                logger.info(f"Created cache directory: {cache_dir}")
+            
             # Get base VLM options
             vlm_options = vlm_model_specs.GRANITEDOCLING_TRANSFORMERS
             

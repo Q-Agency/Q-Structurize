@@ -6,7 +6,7 @@ services:
     volumes:
       - ./uploads:/app/uploads
       - ./cache:/app/.cache
-      - ./cache:/root/.cache  # Also cache in root directory
+      - ./cache:/root/.cache
     environment:
       - PYTHONPATH=/app
       - TRANSFORMERS_CACHE=/app/.cache/transformers
@@ -15,7 +15,7 @@ services:
       - HF_HUB_CACHE=/app/.cache/huggingface
       - CUDA_VISIBLE_DEVICES=0
     restart: unless-stopped
-    # Enable GPU support for VLM processing on Linux with H200
+    # Simple GPU configuration
     deploy:
       resources:
         reservations:

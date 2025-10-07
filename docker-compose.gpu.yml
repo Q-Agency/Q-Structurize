@@ -15,7 +15,9 @@ services:
       - HF_HUB_CACHE=/app/.cache/huggingface
       - CUDA_VISIBLE_DEVICES=0
     restart: unless-stopped
-    # Enable GPU support for VLM processing on Linux with H200
+    # Alternative GPU configuration using runtime
+    runtime: nvidia
+    # Or use deploy section
     deploy:
       resources:
         reservations:
