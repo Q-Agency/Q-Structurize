@@ -5,6 +5,10 @@ services:
       - "8878:8000"
     volumes:
       - ./uploads:/app/uploads
+      - ./cache:/app/.cache
     environment:
       - PYTHONPATH=/app
+      - TRANSFORMERS_CACHE=/app/.cache/transformers
+      - HF_HOME=/app/.cache/huggingface
+      - TORCH_HOME=/app/.cache/torch
     restart: unless-stopped
