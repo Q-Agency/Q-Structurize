@@ -1,25 +1,62 @@
+version: '3.8'
+
 services:
   q-structurize:
     build: .
+    container_name: q-structurize
     ports:
       - "8878:8000"
     volumes:
+      # Persist uploads
       - ./uploads:/app/uploads
+      # Persist model cache across container rebuilds
       - ./cache:/app/.cache
-      - ./cache:/root/.cache  # Also cache in root directory
     environment:
+      # Python settings
       - PYTHONPATH=/app
-      - TRANSFORMERS_CACHE=/app/.cache/transformers
+      - PYTHONUNBUFFERED=1
+      
+      # HuggingFace cache locations
       - HF_HOME=/app/.cache/huggingface
+      - HF_HUB_CACHE=/app/.cache/huggingface/hub
+      - TRANSFORMERS_CACHE=/app/.cache/transformers
       - TORCH_HOME=/app/.cache/torch
-      - HF_HUB_CACHE=/app/.cache/huggingface
+      
+      # GPU settings
       - CUDA_VISIBLE_DEVICES=0
+      
+      # Performance optimizations
+      - TOKENIZERS_PARALLELISM=false
+      - OMP_NUM_THREADS=8
+      
+    # Shared memory for GPU workloads
+    shm_size: '16gb'
+    
+    # Restart policy
     restart: unless-stopped
-    # Enable GPU support for VLM processing on Linux with H200
+    
+    # GPU configuration for H200
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              count: 1
               capabilities: [gpu]
+        # Optional: Set resource limits
+        limits:
+          memory: 32G
+          cpus: '8'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+# Optional: Create named volumes instead of bind mounts
+# volumes:
+#   cache:
+#   uploads:
