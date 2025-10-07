@@ -1,18 +1,9 @@
-FROM nvidia/cuda:12.1-devel-ubuntu20.04
+FROM python:3.11-slim
 
 # Set working directory
 WORKDIR /app
 
-# Install Python 3.11
-RUN apt-get update && apt-get install -y \
-    software-properties-common \
-    && add-apt-repository ppa:deadsnakes/ppa \
-    && apt-get update \
-    && apt-get install -y python3.11 python3.11-dev python3.11-distutils python3-pip \
-    && ln -s /usr/bin/python3.11 /usr/bin/python \
-    && ln -s /usr/bin/python3.11 /usr/bin/python3
-
-# Install system dependencies for Docling VLM with GPU support
+# Install system dependencies for Docling VLM
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -36,10 +27,8 @@ RUN apt-get update && apt-get install -y \
     python3-numpy \
     && rm -rf /var/lib/apt/lists/*
 
-# Set environment variables for CUDA
-ENV CUDA_HOME=/usr/local/cuda
-ENV PATH=${CUDA_HOME}/bin:${PATH}
-ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
+# Set environment variables for CUDA (will be available via nvidia-docker runtime)
+ENV CUDA_VISIBLE_DEVICES=0
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
