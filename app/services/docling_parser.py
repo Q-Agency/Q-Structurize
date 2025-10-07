@@ -111,3 +111,18 @@ class DoclingParser:
     def is_available(self) -> bool:
         """Check if Docling VLM parsing is available."""
         return DOCLING_AVAILABLE and self.converter is not None
+
+    def get_parser_info(self) -> Dict[str, Any]:
+        """Get information about the Docling VLM parser."""
+        return {
+            "available": self.is_available(),
+            "library": "docling" if DOCLING_AVAILABLE else None,
+            "model": "granite_docling" if self.is_available() else None,
+            "description": "High-precision PDF parsing using GraniteDocling VLM",
+            "features": [
+                "Visual Language Model processing",
+                "Maximum precision text extraction",
+                "Structured markdown output",
+                "Metadata extraction"
+            ]
+        }

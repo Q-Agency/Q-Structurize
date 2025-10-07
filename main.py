@@ -145,6 +145,20 @@ async def root():
     }
 
 
+@app.get("/parsers/info",
+         summary="Get Parser Information",
+         description="Get information about available PDF parsers and their status",
+         tags=["System"])
+async def get_parser_info():
+    """
+    Get information about available PDF parsers.
+    
+    Returns details about the Docling VLM parser including availability,
+    model information, and supported features.
+    """
+    return docling_parser.get_parser_info()
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
