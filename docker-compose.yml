@@ -16,14 +16,8 @@ services:
     environment:
       # Python settings
       - PYTHONPATH=/app
-      - PYTHONUNBUFFERED=1
-      
-      # Docling cache paths (must match where docling-tools downloads)
-      - DOCLING_ARTIFACTS_PATH=/root/.cache/docling/models
-      - HF_HOME=/app/.cache/huggingface
-      
-      # Tokenizers settings
-      - TOKENIZERS_PARALLELISM=false
+      # Note: Other environment variables (DOCLING_ARTIFACTS_PATH, HF_HOME, etc.) 
+      # are already set in the Dockerfile and don't need to be repeated here
       
     # Restart policy
     restart: unless-stopped

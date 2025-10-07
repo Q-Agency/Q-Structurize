@@ -8,10 +8,23 @@ WORKDIR /app
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
+    # Tokenizers - disable parallelism to avoid fork warnings
     TOKENIZERS_PARALLELISM=false \
-    # Docling models cache (must match where docling-tools downloads)
+    # CPU threading optimizations for 2x Xeon 6960P (144 cores total)
+    OMP_NUM_THREADS=40 \
+    MKL_NUM_THREADS=40 \
+    OPENBLAS_NUM_THREADS=40 \
+    NUMEXPR_NUM_THREADS=40 \
+    TORCH_NUM_THREADS=40 \
+    # CPU-specific optimizations for Intel Xeon
+    KMP_BLOCKTIME=1 \
+    KMP_SETTINGS=1 \
+    KMP_AFFINITY="granularity=fine,compact,1,0" \
+    # Memory optimization
+    MALLOC_ARENA_MAX=4 \
+    # Docling models cache (where docling-tools downloads models)
     DOCLING_ARTIFACTS_PATH=/root/.cache/docling/models \
-    # HuggingFace cache (for model downloads)
+    # HuggingFace cache
     HF_HOME=/app/.cache/huggingface \
     PATH="/usr/local/bin:${PATH}"
 
