@@ -95,7 +95,7 @@ class DoclingParser:
             
             pipeline_options = PdfPipelineOptions()
             pipeline_options.do_ocr = False  # DISABLE OCR
-            pipeline_options.table_structure_options.mode = pipeline_options.table_structure_options.mode.__class__.FAST
+            pipeline_options.table_structure_options.mode = TableFormerMode.FAST
 
             self.converter = DocumentConverter(
                 format_options={
