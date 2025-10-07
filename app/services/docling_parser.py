@@ -2,6 +2,7 @@
 
 import tempfile
 import logging
+import os
 from typing import Optional, Dict, Any
 
 # Try to import docling, set availability flag
@@ -39,6 +40,26 @@ class DoclingParser:
             return
 
         try:
+            # Debug cache directories
+            logger.info("=== CACHE DEBUG INFO ===")
+            logger.info(f"HF_HOME: {os.environ.get('HF_HOME', 'Not set')}")
+            logger.info(f"TRANSFORMERS_CACHE: {os.environ.get('TRANSFORMERS_CACHE', 'Not set')}")
+            logger.info(f"TORCH_HOME: {os.environ.get('TORCH_HOME', 'Not set')}")
+            
+            # Check if cache directories exist
+            cache_dirs = ['/app/.cache', '/root/.cache']
+            for cache_dir in cache_dirs:
+                if os.path.exists(cache_dir):
+                    logger.info(f"Cache directory exists: {cache_dir}")
+                    # List contents
+                    try:
+                        contents = os.listdir(cache_dir)
+                        logger.info(f"Cache contents in {cache_dir}: {contents}")
+                    except:
+                        logger.info(f"Could not list contents of {cache_dir}")
+                else:
+                    logger.info(f"Cache directory does not exist: {cache_dir}")
+            
             # Get base VLM options
             vlm_options = vlm_model_specs.GRANITEDOCLING_TRANSFORMERS
             
@@ -57,6 +78,7 @@ class DoclingParser:
                 vlm_options.torch_dtype = 'float16'  # Use FP16 for speed on H200
             
             # Use GraniteDocling VLM with H200 optimizations
+            logger.info("Initializing DocumentConverter with H200 optimizations...")
             self.converter = DocumentConverter(
                 format_options={
                     InputFormat.PDF: PdfFormatOption(
@@ -67,6 +89,16 @@ class DoclingParser:
             )
             logger.info("Docling VLM converter initialized successfully with H200 optimizations")
             logger.info(f"H200 Config: load_in_8bit={vlm_options.load_in_8bit}, max_tokens={vlm_options.max_new_tokens}, kv_cache={vlm_options.use_kv_cache}")
+            
+            # Check cache after initialization
+            logger.info("=== POST-INITIALIZATION CACHE CHECK ===")
+            for cache_dir in cache_dirs:
+                if os.path.exists(cache_dir):
+                    try:
+                        contents = os.listdir(cache_dir)
+                        logger.info(f"Cache contents after init in {cache_dir}: {contents}")
+                    except:
+                        logger.info(f"Could not list contents of {cache_dir}")
 
         except Exception as e:
             logger.error(f"Failed to initialize Docling VLM converter: {str(e)}")

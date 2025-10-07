@@ -6,18 +6,20 @@ services:
     volumes:
       - ./uploads:/app/uploads
       - ./cache:/app/.cache
+      - ./cache:/root/.cache  # Also cache in root directory
     environment:
       - PYTHONPATH=/app
       - TRANSFORMERS_CACHE=/app/.cache/transformers
       - HF_HOME=/app/.cache/huggingface
       - TORCH_HOME=/app/.cache/torch
+      - HF_HUB_CACHE=/app/.cache/huggingface
       - CUDA_VISIBLE_DEVICES=0
     restart: unless-stopped
-    # Enable GPU support for VLM processing
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    # GPU support disabled for macOS testing
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
