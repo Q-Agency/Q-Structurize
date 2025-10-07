@@ -21,6 +21,7 @@ try:
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.pipeline.standard_pdf_pipeline import StandardPdfPipeline
+    from docling.pipeline.pdf_pipeline_options import PdfPipelineOptions
     DOCLING_AVAILABLE = True
 except ImportError:
     DOCLING_AVAILABLE = False
@@ -92,10 +93,15 @@ class DoclingParser:
             
             init_start = time.time()
             
+            pipeline_options = PdfPipelineOptions()
+            pipeline_options.do_ocr = False  # DISABLE OCR
+            pipeline_options.table_structure_options.mode = TableFormerMode.FAST
+            
             self.converter = DocumentConverter(
                 format_options={
                     InputFormat.PDF: PdfFormatOption(
                         pipeline_cls=StandardPdfPipeline,
+                        pipeline_options=pipeline_options,
                     ),
                 }
             )
