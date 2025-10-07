@@ -10,7 +10,6 @@ import sys
 import logging
 import time
 from pathlib import Path
-import tempfile
 
 # Configure logging
 logging.basicConfig(
@@ -47,117 +46,34 @@ def setup_cache_directories():
     logger.info("✅ Cache directories configured")
 
 
-def create_dummy_pdf():
-    """Create a minimal dummy PDF for triggering model download."""
-    # Minimal valid PDF content
-    pdf_content = b"""%PDF-1.4
-1 0 obj
-<<
-/Type /Catalog
-/Pages 2 0 R
->>
-endobj
-2 0 obj
-<<
-/Type /Pages
-/Kids [3 0 R]
-/Count 1
->>
-endobj
-3 0 obj
-<<
-/Type /Page
-/Parent 2 0 R
-/Resources <<
-/Font <<
-/F1 <<
-/Type /Font
-/Subtype /Type1
-/BaseFont /Helvetica
->>
->>
->>
-/MediaBox [0 0 612 792]
-/Contents 4 0 R
->>
-endobj
-4 0 obj
-<<
-/Length 44
->>
-stream
-BT
-/F1 12 Tf
-100 700 Td
-(Test) Tj
-ET
-endstream
-endobj
-xref
-0 5
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-0000000317 00000 n 
-trailer
-<<
-/Size 5
-/Root 1 0 R
->>
-startxref
-410
-%%EOF
-"""
-    
-    # Create temporary PDF file
-    fd, pdf_path = tempfile.mkstemp(suffix='.pdf')
-    try:
-        os.write(fd, pdf_content)
-        os.close(fd)
-        logger.info(f"✅ Created dummy PDF at: {pdf_path}")
-        return pdf_path
-    except Exception as e:
-        logger.error(f"❌ Failed to create dummy PDF: {e}")
-        return None
-
-
 def verify_cache_structure():
     """Verify that the cache has the expected structure."""
-    hub_path = Path('/app/.cache/huggingface/hub')
+    expected_model_path = Path('/app/.cache/huggingface/hub/models--ibm-granite--granite-docling-258M')
     
-    if not hub_path.exists():
-        logger.warning(f"⚠️  Hub cache directory does not exist: {hub_path}")
-        return False
-    
-    # Look for any model directories
-    model_dirs = [d for d in hub_path.iterdir() if d.is_dir() and d.name.startswith('models--')]
-    
-    if model_dirs:
-        for model_dir in model_dirs:
-            logger.info(f"✅ Model cache found at: {model_dir}")
-            
-            # Count files in cache
-            try:
-                files = list(model_dir.rglob('*'))
-                file_count = len([f for f in files if f.is_file()])
-                dir_count = len([f for f in files if f.is_dir()])
-                
-                logger.info(f"📊 Cache statistics:")
-                logger.info(f"   - {file_count} files")
-                logger.info(f"   - {dir_count} directories")
-                
-                # Calculate total size
-                total_size = sum(f.stat().st_size for f in files if f.is_file())
-                size_mb = total_size / (1024 * 1024)
-                logger.info(f"   - Total size: {size_mb:.2f} MB")
-                
-            except Exception as e:
-                logger.warning(f"Could not calculate cache statistics: {e}")
+    if expected_model_path.exists():
+        logger.info(f"✅ Model cache found at: {expected_model_path}")
         
-        return True
+        # Count files in cache
+        try:
+            files = list(expected_model_path.rglob('*'))
+            file_count = len([f for f in files if f.is_file()])
+            dir_count = len([f for f in files if f.is_dir()])
+            
+            logger.info(f"📊 Cache statistics:")
+            logger.info(f"   - {file_count} files")
+            logger.info(f"   - {dir_count} directories")
+            
+            # Calculate total size
+            total_size = sum(f.stat().st_size for f in files if f.is_file())
+            size_mb = total_size / (1024 * 1024)
+            logger.info(f"   - Total size: {size_mb:.2f} MB")
+            
+            return True
+        except Exception as e:
+            logger.warning(f"Could not calculate cache statistics: {e}")
+            return True  # Cache exists, just can't get stats
     else:
-        logger.warning(f"⚠️  No model directories found in {hub_path}")
+        logger.warning(f"⚠️  Model cache not found at expected location: {expected_model_path}")
         return False
 
 
@@ -201,9 +117,10 @@ def preload_docling_model():
         logger.info(f"   - max_new_tokens: {vlm_options.max_new_tokens}")
         logger.info(f"   - use_kv_cache: {vlm_options.use_kv_cache}")
         
-        # Initialize converter
+        # Initialize converter to trigger model download
         logger.info("=" * 70)
-        logger.info("⏳ Initializing DocumentConverter...")
+        logger.info("⏳ Initializing DocumentConverter (this will download the model)...")
+        logger.info("⏳ First-time download may take 5-10 minutes depending on network speed...")
         logger.info("=" * 70)
         
         init_start = time.time()
@@ -220,37 +137,10 @@ def preload_docling_model():
         )
         
         init_time = time.time() - init_start
+        
+        logger.info("=" * 70)
         logger.info(f"✅ DocumentConverter initialized in {init_time:.2f} seconds")
-        
-        # Create a dummy PDF and process it to trigger model download
-        logger.info("=" * 70)
-        logger.info("⏳ Processing dummy PDF to trigger model download...")
-        logger.info("⏳ This will download the model (5-10 minutes on first run)...")
-        logger.info("=" * 70)
-        
-        dummy_pdf = create_dummy_pdf()
-        if dummy_pdf:
-            try:
-                process_start = time.time()
-                result = converter.convert(source=dummy_pdf)
-                process_time = time.time() - process_start
-                
-                logger.info(f"✅ Dummy PDF processed in {process_time:.2f} seconds")
-                logger.info("✅ Model download and caching completed")
-                
-                # Clean up dummy PDF
-                os.unlink(dummy_pdf)
-                logger.info("✅ Cleaned up dummy PDF")
-                
-            except Exception as e:
-                logger.error(f"❌ Error processing dummy PDF: {e}")
-                if os.path.exists(dummy_pdf):
-                    os.unlink(dummy_pdf)
-                return False
-        else:
-            logger.error("❌ Could not create dummy PDF")
-            return False
-        
+        logger.info("✅ Model download and caching completed")
         logger.info("=" * 70)
         
         # Verify cache structure
