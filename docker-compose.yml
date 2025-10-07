@@ -11,4 +11,13 @@ services:
       - TRANSFORMERS_CACHE=/app/.cache/transformers
       - HF_HOME=/app/.cache/huggingface
       - TORCH_HOME=/app/.cache/torch
+      - CUDA_VISIBLE_DEVICES=0
     restart: unless-stopped
+    # Enable GPU support for VLM processing
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
