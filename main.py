@@ -18,12 +18,13 @@ class ParseResponse(BaseModel):
     """Response model for PDF parsing endpoint."""
     message: str
     status: str
+    content: str | None = None  # The parsed content in markdown format
 
 
 app = FastAPI(
     title="Q-Structurize",
-    description="High-precision PDF parsing and structured text extraction API using Docling VLM",
-    version="1.0.0",
+    description="Advanced PDF parsing and structured text extraction API using Docling StandardPdfPipeline with layout analysis, OCR, and table extraction",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -31,33 +32,36 @@ app = FastAPI(
 
 @app.post("/parse/file", 
           response_model=ParseResponse,
-          summary="Parse PDF with GraniteDocling VLM",
-          description="Upload a PDF file and get structured text output using Docling VLM for maximum precision",
+          summary="Parse PDF with Docling StandardPipeline",
+          description="Upload a PDF file and get structured text output using Docling's StandardPdfPipeline with layout analysis, OCR, and table extraction",
           tags=["PDF Parsing"])
 async def parse_pdf_file(
     file: UploadFile = File(..., description="PDF file to parse", media_type="application/pdf"),
     max_tokens_per_chunk: int = Form(512, description="Maximum tokens per chunk (reserved for future use)"),
-    optimize_pdf: bool = Form(True, description="Whether to optimize PDF for better text extraction"),
-    use_vlm: bool = Form(True, description="Whether to use Docling VLM for maximum precision")
+    optimize_pdf: bool = Form(True, description="Whether to optimize PDF for better text extraction")
 ):
     """
-    Parse PDF file using Docling VLM for maximum precision.
+    Parse PDF file using Docling's StandardPdfPipeline.
     
-    This endpoint processes PDF files using advanced Vision-Language Model (VLM) technology
-    to extract structured text with maximum accuracy. The VLM can understand both text and
-    visual elements in the document.
+    This endpoint processes PDF files using Docling's robust standard pipeline which includes:
+    - **Layout Detection**: Document structure analysis using DocLayNet model
+    - **Text Extraction**: High-quality text extraction from PDF layers
+    - **OCR Processing**: Text extraction from images and scanned documents using EasyOCR
+    - **Table Extraction**: Accurate table structure preservation using TableFormer
+    - **Structured Output**: Clean markdown with proper formatting
     
     **Features:**
-    - 🎯 **GraniteDocling VLM**: Maximum precision PDF parsing
+    - 📐 **Layout Analysis**: Understands document structure (headings, paragraphs, lists)
+    - 📊 **Table Extraction**: Preserves table structure and formatting
+    - 🔍 **OCR Support**: Handles scanned documents and images
     - 📄 **PDF Optimization**: Pre-processing for better results  
-    - 🔄 **Structured Output**: Clean markdown with visual understanding
-    - ⚡ **Fast Processing**: Optimized for production use
+    - 🔄 **Structured Output**: Clean markdown format
+    - ⚡ **CPU-Optimized**: Fast processing without GPU
     
     **Parameters:**
     - **file**: PDF file to parse (required)
     - **max_tokens_per_chunk**: Maximum tokens per chunk (reserved for future use)
     - **optimize_pdf**: Whether to optimize PDF for better text extraction (default: true)
-    - **use_vlm**: Whether to use Docling VLM for maximum precision (default: true)
     
     **Returns:**
     - Structured markdown content
@@ -90,37 +94,29 @@ async def parse_pdf_file(
                            f"Reduction: {size_info['size_reduction_percentage']}%")
         
         # ========================================
-        # STEP 3: PDF PARSING WITH DOCLING VLM
+        # STEP 3: PDF PARSING WITH DOCLING STANDARD PIPELINE
         # ========================================
-        if use_vlm:
-            if not docling_parser.is_available():
-                raise HTTPException(
-                    status_code=503, 
-                    detail="Docling VLM parser is not available. Please check dependencies."
-                )
-            
-            logger.info("Starting PDF parsing with GraniteDocling VLM...")
-            parse_result = docling_parser.parse_pdf(pdf_content)
-            
-            if not parse_result["success"]:
-                raise HTTPException(
-                    status_code=500, 
-                    detail=f"PDF parsing failed: {parse_result['error']}"
-                )
-            
-            # Return successful parsing result
-            return ParseResponse(
-                message="PDF parsed successfully using GraniteDocling VLM",
-                status="success",
-                content=parse_result["content"]
+        if not docling_parser.is_available():
+            raise HTTPException(
+                status_code=503, 
+                detail="Docling parser is not available. Please check dependencies."
             )
-        else:
-            # Fallback to basic processing
-            return ParseResponse(
-                message="PDF received successfully (VLM parsing disabled)",
-                status="success",
-                content=None
+        
+        logger.info("Starting PDF parsing with Docling StandardPdfPipeline...")
+        parse_result = docling_parser.parse_pdf(pdf_content)
+        
+        if not parse_result["success"]:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"PDF parsing failed: {parse_result['error']}"
             )
+        
+        # Return successful parsing result
+        return ParseResponse(
+            message="PDF parsed successfully using Docling StandardPdfPipeline",
+            status="success",
+            content=parse_result["content"]
+        )
         
     except HTTPException:
         raise
@@ -138,8 +134,14 @@ async def root():
     return {
         "message": "Q-Structurize API is running", 
         "status": "healthy",
-        "features": ["PDF optimization", "Docling VLM parsing"],
-        "version": "1.0.0",
+        "features": [
+            "PDF optimization",
+            "Docling StandardPdfPipeline",
+            "Layout analysis",
+            "OCR processing",
+            "Table extraction"
+        ],
+        "version": "2.0.0",
         "docs": "/docs",
         "redoc": "/redoc"
     }
@@ -153,8 +155,12 @@ async def get_parser_info():
     """
     Get information about available PDF parsers.
     
-    Returns details about the Docling VLM parser including availability,
-    model information, and supported features.
+    Returns details about the Docling StandardPdfPipeline parser including:
+    - Availability status
+    - Models used (layout detection, OCR, table extraction)
+    - Supported features
+    - Performance characteristics
+    - Cache information
     """
     return docling_parser.get_parser_info()
 

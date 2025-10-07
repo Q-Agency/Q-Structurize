@@ -3,7 +3,8 @@ alwaysApply: true
 ---
 Use Python and FastApi.
 Always use the latest versions.
-I will run this on remote Ubuntu machine that has H200 NVidia GPU.
+I will run this on remote Ubuntu machine that has 2x Xeon CPU: "2x P4X-GNR6960P-SRPKX-UCC (Xeon 6960P 2P 72C(2.7G/500W,2.3/400 (66/2.6,48C/3.1/450)432 M4DIQD)"
+
 I will run this on Docker.
 
 I want to go step by step.

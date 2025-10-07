@@ -2,61 +2,43 @@ version: '3.8'
 
 services:
   q-structurize:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: q-structurize
     ports:
       - "8878:8000"
     volumes:
       # Persist uploads
       - ./uploads:/app/uploads
-      # Persist model cache across container rebuilds
-      - ./cache:/app/.cache
+      # Note: Models are built into the image during 'docker build'
+      # No need to mount cache volumes as models persist in image layers
     environment:
       # Python settings
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
       
-      # HuggingFace cache locations
+      # Docling cache paths (must match where docling-tools downloads)
+      - DOCLING_ARTIFACTS_PATH=/root/.cache/docling/models
       - HF_HOME=/app/.cache/huggingface
-      - HF_HUB_CACHE=/app/.cache/huggingface/hub
-      - TRANSFORMERS_CACHE=/app/.cache/transformers
-      - TORCH_HOME=/app/.cache/torch
       
-      # GPU settings
-      - CUDA_VISIBLE_DEVICES=0
-      
-      # Performance optimizations
+      # Tokenizers settings
       - TOKENIZERS_PARALLELISM=false
-      - OMP_NUM_THREADS=8
       
-    # Shared memory for GPU workloads
-    shm_size: '16gb'
-    
     # Restart policy
     restart: unless-stopped
     
-    # GPU configuration for H200
+    # Resource limits (optional, adjust as needed)
     deploy:
       resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-        # Optional: Set resource limits
         limits:
-          memory: 32G
-          cpus: '8'
+          memory: 2G
+          cpus: '2'
     
     # Health check
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 120s
-
-# Optional: Create named volumes instead of bind mounts
-# volumes:
-#   cache:
-#   uploads:
+      start_period: 30s
