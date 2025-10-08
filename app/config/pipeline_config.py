@@ -1,12 +1,12 @@
 """
-Pipeline configuration options for Docling ThreadedPdfPipeline.
+Pipeline configuration options for Docling StandardPdfPipeline with ThreadedPdfPipelineOptions.
 
 This module contains all available configuration options, examples,
 and usage documentation for the PDF parsing pipeline with batching support.
 """
 
 PIPELINE_OPTIONS_CONFIG = {
-    "description": "Available pipeline configuration options for Docling ThreadedPdfPipeline with batching",
+    "description": "Available pipeline configuration options for Docling StandardPdfPipeline with ThreadedPdfPipelineOptions (batched processing)",
     "options": {
         "enable_ocr": {
             "type": "boolean",

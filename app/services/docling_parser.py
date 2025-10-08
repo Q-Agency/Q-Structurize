@@ -1,14 +1,15 @@
 """
-Docling service for PDF parsing using ThreadedPdfPipeline.
+Docling service for PDF parsing using StandardPdfPipeline with ThreadedPdfPipelineOptions.
 
-The ThreadedPdfPipeline includes:
+StandardPdfPipeline with ThreadedPdfPipelineOptions enables:
 - Layout Detection: DocLayNet-based model for document structure understanding
 - Table Extraction: TableFormer model for accurate table structure recognition
 - OCR: EasyOCR for text extraction from images and scanned documents
 - Text Extraction: Direct text layer extraction when available
-- Batching: Process multiple pages/operations in parallel for better performance
+- Batched Processing: Process multiple pages/operations in parallel for better performance
 - Backpressure Control: Queue management to prevent memory overflow
 
+The pipeline automatically uses threaded/batched processing when ThreadedPdfPipelineOptions are provided.
 Models are automatically downloaded from HuggingFace Hub on first use and cached locally.
 """
 
@@ -22,8 +23,8 @@ from typing import Optional, Dict, Any
 try:
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import DocumentConverter, PdfFormatOption
-    from docling.pipeline.threaded_pdf_pipeline import ThreadedPdfPipeline
-    from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
+    from docling.pipeline.standard_pdf_pipeline import StandardPdfPipeline
+    from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions, TableFormerMode
     from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
     DOCLING_AVAILABLE = True
 except ImportError as e:
@@ -31,8 +32,8 @@ except ImportError as e:
     InputFormat = None
     DocumentConverter = None
     PdfFormatOption = None
-    ThreadedPdfPipeline = None
-    PdfPipelineOptions = None
+    StandardPdfPipeline = None
+    ThreadedPdfPipelineOptions = None
     AcceleratorOptions = None
     AcceleratorDevice = None
     import logging
@@ -49,7 +50,7 @@ class DoclingParser:
         self.mode = "threaded-pipeline"
         # No longer initialize converter at startup - will be created per request
     
-    def _create_pipeline_options(self, user_options: Optional[Dict[str, Any]] = None) -> PdfPipelineOptions:
+    def _create_pipeline_options(self, user_options: Optional[Dict[str, Any]] = None) -> ThreadedPdfPipelineOptions:
 
         # Default options
         defaults = {
@@ -76,8 +77,8 @@ class DoclingParser:
         # Merge with user options
         options = {**defaults, **(user_options or {})}
         
-        # Create PdfPipelineOptions (works with ThreadedPdfPipeline)
-        pipeline_options = PdfPipelineOptions()
+        # Create ThreadedPdfPipelineOptions for batched processing with StandardPdfPipeline
+        pipeline_options = ThreadedPdfPipelineOptions()
         
         # OCR configuration
         pipeline_options.do_ocr = options["enable_ocr"]
@@ -127,15 +128,17 @@ class DoclingParser:
         
         return pipeline_options
     
-    def _create_converter(self, pipeline_options: PdfPipelineOptions) -> DocumentConverter:
+    def _create_converter(self, pipeline_options: ThreadedPdfPipelineOptions) -> DocumentConverter:
 
         if not DOCLING_AVAILABLE:
             raise RuntimeError("Docling is not available")
         
+        # StandardPdfPipeline automatically uses threaded/batched processing 
+        # when passed ThreadedPdfPipelineOptions
         converter = DocumentConverter(
             format_options={
                 InputFormat.PDF: PdfFormatOption(
-                    pipeline_cls=ThreadedPdfPipeline,
+                    pipeline_cls=StandardPdfPipeline,
                     pipeline_options=pipeline_options,
                 ),
             }
@@ -157,7 +160,7 @@ class DoclingParser:
             
             # Log configuration
             logger.info("============================================================")
-            logger.info("📄 Starting PDF parsing with ThreadedPdfPipeline")
+            logger.info("📄 Starting PDF parsing with StandardPdfPipeline (batched mode)")
             logger.info("⚙️  Configuration:")
             logger.info(f"   - OCR: {'Enabled' if pipeline_options.do_ocr else 'Disabled'}")
             if pipeline_options.do_ocr:
@@ -225,11 +228,11 @@ class DoclingParser:
         return DOCLING_AVAILABLE
 
     def get_parser_info(self) -> Dict[str, Any]:
-        """Get information about the Docling ThreadedPdfPipeline parser."""
+        """Get information about the Docling parser with batched processing."""
         return {
             "available": self.is_available(),
             "library": "docling" if DOCLING_AVAILABLE else None,
-            "pipeline": "ThreadedPdfPipeline" if self.is_available() else None,
+            "pipeline": "StandardPdfPipeline with ThreadedPdfPipelineOptions" if self.is_available() else None,
             "description": "High-performance PDF parsing with batching, layout analysis, optional OCR, and table extraction",
             "configuration": {
                 "note": "Pipeline options can be configured per request via API",

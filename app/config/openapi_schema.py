@@ -27,7 +27,7 @@ def get_custom_openapi(app):
         description="""
 # Q-Structurize - Advanced PDF Parsing API
 
-Powered by Docling ThreadedPdfPipeline with **batching and configurable per-request options**.
+Powered by Docling StandardPdfPipeline with **ThreadedPdfPipelineOptions for batching and configurable per-request options**.
 
 ## Key Features
 

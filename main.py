@@ -26,7 +26,7 @@ class ParseResponse(BaseModel):
 
 app = FastAPI(
     title="Q-Structurize",
-    description="Advanced PDF parsing and structured text extraction API using Docling ThreadedPdfPipeline with batching and backpressure control. Features include layout analysis, optional OCR with multi-language support, configurable table extraction, batched processing, and multi-threaded processing optimized for 2x 72-core Xeon 6960P (144 cores).",
+    description="Advanced PDF parsing and structured text extraction API using Docling StandardPdfPipeline with ThreadedPdfPipelineOptions for batching and backpressure control. Features include layout analysis, optional OCR with multi-language support, configurable table extraction, batched processing, and multi-threaded processing optimized for 2x 72-core Xeon 6960P (144 cores).",
     version="2.2.0",
     docs_url="/docs",
     redoc_url="/redoc"
@@ -35,8 +35,8 @@ app = FastAPI(
 
 @app.post("/parse/file", 
           response_model=ParseResponse,
-          summary="Parse PDF with Docling ThreadedPipeline",
-          description="Upload a PDF file and get structured text output using Docling's ThreadedPdfPipeline with batching, backpressure control, and configurable options",
+          summary="Parse PDF with Batched Processing",
+          description="Upload a PDF file and get structured text output using Docling's StandardPdfPipeline with ThreadedPdfPipelineOptions for batching, backpressure control, and configurable options",
           tags=["PDF Parsing"],
           responses={
               200: {
@@ -44,7 +44,7 @@ app = FastAPI(
                   "content": {
                       "application/json": {
                           "example": {
-                              "message": "PDF parsed successfully using Docling ThreadedPdfPipeline",
+                              "message": "PDF parsed successfully using batched processing",
                               "status": "success",
                               "content": "# Document Title\n\n## Section 1\n\nParagraph content...\n\n| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |"
                           }
@@ -81,9 +81,9 @@ async def parse_pdf_file(
     batch_timeout_seconds: float = Form(2.0, ge=0.1, le=30.0, description="Batch processing timeout in seconds (0.1-30.0)")
 ):
     """
-    Parse PDF file using Docling's ThreadedPdfPipeline with batching and configurable options.
+    Parse PDF file using Docling's StandardPdfPipeline with ThreadedPdfPipelineOptions for batched processing.
     
-    This endpoint processes PDF files using Docling's high-performance threaded pipeline which includes:
+    This endpoint processes PDF files using Docling's StandardPdfPipeline with ThreadedPdfPipelineOptions which enables:
     - **Layout Detection**: Document structure analysis using DocLayNet model
     - **Text Extraction**: High-quality text extraction from PDF layers
     - **OCR Processing**: Optional text extraction from images and scanned documents using EasyOCR
@@ -226,7 +226,7 @@ async def parse_pdf_file(
                            f"Reduction: {size_info['size_reduction_percentage']}%")
         
         # ========================================
-        # STEP 3: PDF PARSING WITH DOCLING THREADED PIPELINE
+        # STEP 3: PDF PARSING WITH DOCLING BATCHED PROCESSING
         # ========================================
         if not docling_parser.is_available():
             raise HTTPException(
@@ -234,7 +234,7 @@ async def parse_pdf_file(
                 detail="Docling parser is not available. Please check dependencies."
             )
         
-        logger.info("Starting PDF parsing with Docling ThreadedPdfPipeline...")
+        logger.info("Starting PDF parsing with Docling (batched mode)...")
         parse_result = docling_parser.parse_pdf(pdf_content, options=parsed_options)
         
         if not parse_result["success"]:
@@ -245,7 +245,7 @@ async def parse_pdf_file(
         
         # Return successful parsing result
         return ParseResponse(
-            message="PDF parsed successfully using Docling ThreadedPdfPipeline",
+            message="PDF parsed successfully using batched processing",
             status="success",
             content=parse_result["content"]
         )
@@ -268,7 +268,7 @@ async def root():
         "status": "healthy",
         "features": [
             "PDF optimization",
-            "Docling ThreadedPdfPipeline with batching",
+            "Docling StandardPdfPipeline with ThreadedPdfPipelineOptions",
             "Configurable pipeline options per request",
             "Layout analysis",
             "Optional OCR with multi-language support",
@@ -296,8 +296,9 @@ async def get_parser_info():
     """
     Get information about available PDF parsers.
     
-    Returns details about the Docling ThreadedPdfPipeline parser including:
+    Returns details about the Docling parser with batched processing including:
     - Availability status
+    - Pipeline configuration (StandardPdfPipeline with ThreadedPdfPipelineOptions)
     - Models used (layout detection, OCR, table extraction)
     - Supported features
     - Batching capabilities
