@@ -26,8 +26,8 @@ class ParseResponse(BaseModel):
 
 app = FastAPI(
     title="Q-Structurize",
-    description="Advanced PDF parsing and structured text extraction API using Docling StandardPdfPipeline with configurable per-request pipeline options. Features include layout analysis, optional OCR with multi-language support, configurable table extraction, and multi-threaded processing optimized for 72-core Xeon 6960P.",
-    version="2.1.0",
+    description="Advanced PDF parsing and structured text extraction API using Docling ThreadedPdfPipeline with batching and backpressure control. Features include layout analysis, optional OCR with multi-language support, configurable table extraction, batched processing, and multi-threaded processing optimized for 2x 72-core Xeon 6960P (144 cores).",
+    version="2.2.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -35,8 +35,8 @@ app = FastAPI(
 
 @app.post("/parse/file", 
           response_model=ParseResponse,
-          summary="Parse PDF with Docling StandardPipeline",
-          description="Upload a PDF file and get structured text output using Docling's StandardPdfPipeline with configurable options",
+          summary="Parse PDF with Docling ThreadedPipeline",
+          description="Upload a PDF file and get structured text output using Docling's ThreadedPdfPipeline with batching, backpressure control, and configurable options",
           tags=["PDF Parsing"],
           responses={
               200: {
@@ -44,7 +44,7 @@ app = FastAPI(
                   "content": {
                       "application/json": {
                           "example": {
-                              "message": "PDF parsed successfully using Docling StandardPdfPipeline",
+                              "message": "PDF parsed successfully using Docling ThreadedPdfPipeline",
                               "status": "success",
                               "content": "# Document Title\n\n## Section 1\n\nParagraph content...\n\n| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |"
                           }
@@ -72,16 +72,24 @@ async def parse_pdf_file(
     do_code_enrichment: bool = Form(False, description="Enable code block language detection and parsing"),
     do_formula_enrichment: bool = Form(False, description="Enable formula analysis and LaTeX extraction"),
     do_picture_classification: bool = Form(False, description="Enable image classification (charts, diagrams, logos, etc.)"),
-    do_picture_description: bool = Form(False, description="Enable AI-powered image description (requires VLM, significantly increases processing time)")
+    do_picture_description: bool = Form(False, description="Enable AI-powered image description (requires VLM, significantly increases processing time)"),
+    # ThreadedPdfPipeline batching options (performance tuning)
+    layout_batch_size: int = Form(4, ge=1, le=32, description="Batch size for layout detection (1-32, higher = more throughput, more memory)"),
+    ocr_batch_size: int = Form(4, ge=1, le=32, description="Batch size for OCR processing (1-32, higher = more throughput, more memory)"),
+    table_batch_size: int = Form(4, ge=1, le=32, description="Batch size for table extraction (1-32, higher = more throughput, more memory)"),
+    queue_max_size: int = Form(100, ge=10, le=1000, description="Maximum queue size for backpressure control (10-1000)"),
+    batch_timeout_seconds: float = Form(2.0, ge=0.1, le=30.0, description="Batch processing timeout in seconds (0.1-30.0)")
 ):
     """
-    Parse PDF file using Docling's StandardPdfPipeline with configurable options.
+    Parse PDF file using Docling's ThreadedPdfPipeline with batching and configurable options.
     
-    This endpoint processes PDF files using Docling's robust standard pipeline which includes:
+    This endpoint processes PDF files using Docling's high-performance threaded pipeline which includes:
     - **Layout Detection**: Document structure analysis using DocLayNet model
     - **Text Extraction**: High-quality text extraction from PDF layers
     - **OCR Processing**: Optional text extraction from images and scanned documents using EasyOCR
     - **Table Extraction**: Accurate table structure preservation using TableFormer
+    - **Batched Processing**: Process multiple pages/operations in parallel
+    - **Backpressure Control**: Queue management to prevent memory overflow
     - **Structured Output**: Clean markdown with proper formatting
     
     **Features:**
@@ -90,7 +98,9 @@ async def parse_pdf_file(
     - 🔍 **OCR Support**: Optional with multi-language support
     - 📄 **PDF Optimization**: Pre-processing for better results  
     - 🔄 **Structured Output**: Clean markdown format
-    - ⚡ **Multi-threading**: Optimized for 72-core Xeon 6960P
+    - ⚡ **Multi-threading**: Optimized for 2x 72-core Xeon 6960P (144 cores)
+    - 🚀 **Batched Processing**: Parallel processing for better throughput
+    - 🎚️ **Backpressure Control**: Queue management for large documents
     - ⚙️ **Per-request Configuration**: Customize pipeline per document
     
     **Parameters:**
@@ -103,6 +113,11 @@ async def parse_pdf_file(
     - **do_cell_matching**: Enable cell matching (default: true)
     - **num_threads**: Number of threads 1-144 (default: 8)
     - **accelerator_device**: Device selection "cpu", "cuda", or "auto" (default: "cpu")
+    - **layout_batch_size**: Batch size for layout detection 1-32 (default: 4)
+    - **ocr_batch_size**: Batch size for OCR processing 1-32 (default: 4)
+    - **table_batch_size**: Batch size for table extraction 1-32 (default: 4)
+    - **queue_max_size**: Queue size for backpressure control 10-1000 (default: 100)
+    - **batch_timeout_seconds**: Batch timeout 0.1-30.0 seconds (default: 2.0)
     
     **Example Usage:**
     
@@ -125,6 +140,16 @@ async def parse_pdf_file(
       -F "file=@document.pdf" \\
       -F "table_mode=accurate" \\
       -F "num_threads=64"
+    ```
+    
+    Maximum throughput with batching:
+    ```bash
+    curl -X POST "http://localhost:8878/parse/file" \\
+      -F "file=@document.pdf" \\
+      -F "num_threads=64" \\
+      -F "layout_batch_size=16" \\
+      -F "table_batch_size=16" \\
+      -F "queue_max_size=500"
     ```
     
     **Returns:**
@@ -157,7 +182,13 @@ async def parse_pdf_file(
             "do_code_enrichment": do_code_enrichment,
             "do_formula_enrichment": do_formula_enrichment,
             "do_picture_classification": do_picture_classification,
-            "do_picture_description": do_picture_description
+            "do_picture_description": do_picture_description,
+            # ThreadedPdfPipeline batching options
+            "layout_batch_size": layout_batch_size,
+            "ocr_batch_size": ocr_batch_size,
+            "table_batch_size": table_batch_size,
+            "queue_max_size": queue_max_size,
+            "batch_timeout_seconds": batch_timeout_seconds
         }
         
         # Validate using Pydantic model
@@ -195,7 +226,7 @@ async def parse_pdf_file(
                            f"Reduction: {size_info['size_reduction_percentage']}%")
         
         # ========================================
-        # STEP 3: PDF PARSING WITH DOCLING STANDARD PIPELINE
+        # STEP 3: PDF PARSING WITH DOCLING THREADED PIPELINE
         # ========================================
         if not docling_parser.is_available():
             raise HTTPException(
@@ -203,7 +234,7 @@ async def parse_pdf_file(
                 detail="Docling parser is not available. Please check dependencies."
             )
         
-        logger.info("Starting PDF parsing with Docling StandardPdfPipeline...")
+        logger.info("Starting PDF parsing with Docling ThreadedPdfPipeline...")
         parse_result = docling_parser.parse_pdf(pdf_content, options=parsed_options)
         
         if not parse_result["success"]:
@@ -214,7 +245,7 @@ async def parse_pdf_file(
         
         # Return successful parsing result
         return ParseResponse(
-            message="PDF parsed successfully using Docling StandardPdfPipeline",
+            message="PDF parsed successfully using Docling ThreadedPdfPipeline",
             status="success",
             content=parse_result["content"]
         )
@@ -237,14 +268,16 @@ async def root():
         "status": "healthy",
         "features": [
             "PDF optimization",
-            "Docling StandardPdfPipeline",
+            "Docling ThreadedPdfPipeline with batching",
             "Configurable pipeline options per request",
             "Layout analysis",
             "Optional OCR with multi-language support",
             "Configurable table extraction (fast/accurate)",
-            "Multi-threaded processing (optimized for 72-core Xeon 6960P)"
+            "Batched processing for better throughput",
+            "Backpressure control for large documents",
+            "Multi-threaded processing (optimized for 2x 72-core Xeon 6960P)"
         ],
-        "version": "2.1.0",
+        "version": "2.2.0",
         "endpoints": {
             "parse": "/parse/file - Parse PDF with configurable options",
             "parser_info": "/parsers/info - Get parser capabilities",
@@ -263,10 +296,11 @@ async def get_parser_info():
     """
     Get information about available PDF parsers.
     
-    Returns details about the Docling StandardPdfPipeline parser including:
+    Returns details about the Docling ThreadedPdfPipeline parser including:
     - Availability status
     - Models used (layout detection, OCR, table extraction)
     - Supported features
+    - Batching capabilities
     - Performance characteristics
     - Configuration options
     """

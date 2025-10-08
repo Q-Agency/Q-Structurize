@@ -70,6 +70,37 @@ class PipelineOptions(BaseModel):
         default=False,
         description="Enable AI-powered image description generation (requires VLM)"
     )
+    # ThreadedPdfPipeline batching parameters
+    layout_batch_size: int = Field(
+        default=4,
+        ge=1,
+        le=32,
+        description="Batch size for layout detection (1-32, higher = more throughput, more memory)"
+    )
+    ocr_batch_size: int = Field(
+        default=4,
+        ge=1,
+        le=32,
+        description="Batch size for OCR processing (1-32, higher = more throughput, more memory)"
+    )
+    table_batch_size: int = Field(
+        default=4,
+        ge=1,
+        le=32,
+        description="Batch size for table extraction (1-32, higher = more throughput, more memory)"
+    )
+    queue_max_size: int = Field(
+        default=100,
+        ge=10,
+        le=1000,
+        description="Maximum queue size for backpressure control (10-1000)"
+    )
+    batch_timeout_seconds: float = Field(
+        default=2.0,
+        ge=0.1,
+        le=30.0,
+        description="Timeout for batch processing in seconds (0.1-30.0)"
+    )
     
     class Config:
         json_schema_extra = {
@@ -84,7 +115,12 @@ class PipelineOptions(BaseModel):
                 "do_code_enrichment": False,
                 "do_formula_enrichment": False,
                 "do_picture_classification": False,
-                "do_picture_description": False
+                "do_picture_description": False,
+                "layout_batch_size": 4,
+                "ocr_batch_size": 4,
+                "table_batch_size": 4,
+                "queue_max_size": 100,
+                "batch_timeout_seconds": 2.0
             }
         }
 

@@ -1,12 +1,12 @@
 """
-Pipeline configuration options for Docling StandardPdfPipeline.
+Pipeline configuration options for Docling ThreadedPdfPipeline.
 
 This module contains all available configuration options, examples,
-and usage documentation for the PDF parsing pipeline.
+and usage documentation for the PDF parsing pipeline with batching support.
 """
 
 PIPELINE_OPTIONS_CONFIG = {
-    "description": "Available pipeline configuration options for Docling StandardPdfPipeline",
+    "description": "Available pipeline configuration options for Docling ThreadedPdfPipeline with batching",
     "options": {
         "enable_ocr": {
             "type": "boolean",
@@ -90,6 +90,76 @@ PIPELINE_OPTIONS_CONFIG = {
             "notes": "⚠️ Requires Vision-Language Model (VLM). Significantly increases processing time and resource usage.",
             "use_cases": ["Accessibility", "Content understanding", "Visual analysis"],
             "requirements": "VLM model must be configured"
+        },
+        "layout_batch_size": {
+            "type": "integer",
+            "default": 4,
+            "min": 1,
+            "max": 32,
+            "description": "Batch size for layout detection processing",
+            "notes": "Higher values = more throughput but more memory usage. Processes multiple pages in parallel.",
+            "recommendations": {
+                "low_memory": "1-4",
+                "balanced": "4-8",
+                "high_throughput": "8-16",
+                "maximum": "16-32 (requires significant memory)"
+            }
+        },
+        "ocr_batch_size": {
+            "type": "integer",
+            "default": 4,
+            "min": 1,
+            "max": 32,
+            "description": "Batch size for OCR processing",
+            "notes": "Higher values = more throughput but more memory usage. Only applies when OCR is enabled.",
+            "recommendations": {
+                "low_memory": "1-4",
+                "balanced": "4-8",
+                "high_throughput": "8-16",
+                "maximum": "16-32 (requires significant memory)"
+            }
+        },
+        "table_batch_size": {
+            "type": "integer",
+            "default": 4,
+            "min": 1,
+            "max": 32,
+            "description": "Batch size for table extraction processing",
+            "notes": "Higher values = more throughput but more memory usage. Processes multiple tables in parallel.",
+            "recommendations": {
+                "low_memory": "1-4",
+                "balanced": "4-8",
+                "high_throughput": "8-16",
+                "maximum": "16-32 (requires significant memory)"
+            }
+        },
+        "queue_max_size": {
+            "type": "integer",
+            "default": 100,
+            "min": 10,
+            "max": 1000,
+            "description": "Maximum queue size for backpressure control",
+            "notes": "Prevents memory overflow on large documents by limiting pending operations. Higher = more buffering.",
+            "recommendations": {
+                "small_documents": "50-100",
+                "medium_documents": "100-300",
+                "large_documents": "300-500",
+                "very_large": "500-1000"
+            }
+        },
+        "batch_timeout_seconds": {
+            "type": "float",
+            "default": 2.0,
+            "min": 0.1,
+            "max": 30.0,
+            "description": "Timeout for batch processing in seconds",
+            "notes": "Time to wait for a batch to fill before processing. Lower = more responsive, higher = better batching efficiency.",
+            "recommendations": {
+                "low_latency": "0.1-1.0",
+                "balanced": "1.0-3.0",
+                "high_throughput": "3.0-10.0",
+                "maximum_batching": "10.0-30.0"
+            }
         }
     },
     "example_configurations": {
@@ -165,6 +235,51 @@ PIPELINE_OPTIONS_CONFIG = {
                 "do_picture_classification": True,
                 "num_threads": 16
             }
+        },
+        "high_throughput_batching": {
+            "description": "Maximum throughput with aggressive batching (2x 72-core Xeon)",
+            "config": {
+                "num_threads": 64,
+                "layout_batch_size": 16,
+                "table_batch_size": 16,
+                "ocr_batch_size": 16,
+                "queue_max_size": 500,
+                "batch_timeout_seconds": 5.0
+            }
+        },
+        "low_latency": {
+            "description": "Low latency processing with minimal batching",
+            "config": {
+                "num_threads": 16,
+                "layout_batch_size": 1,
+                "table_batch_size": 1,
+                "ocr_batch_size": 1,
+                "queue_max_size": 50,
+                "batch_timeout_seconds": 0.5
+            }
+        },
+        "balanced_batching": {
+            "description": "Balanced configuration for good throughput and latency",
+            "config": {
+                "num_threads": 32,
+                "layout_batch_size": 8,
+                "table_batch_size": 8,
+                "ocr_batch_size": 8,
+                "queue_max_size": 200,
+                "batch_timeout_seconds": 2.0
+            }
+        },
+        "large_document_processing": {
+            "description": "Optimized for large multi-page documents",
+            "config": {
+                "num_threads": 64,
+                "layout_batch_size": 16,
+                "table_batch_size": 12,
+                "ocr_batch_size": 12,
+                "queue_max_size": 1000,
+                "batch_timeout_seconds": 3.0,
+                "table_mode": "fast"
+            }
         }
     },
     "usage": {
@@ -181,6 +296,14 @@ PIPELINE_OPTIONS_CONFIG = {
   -F "table_mode=accurate" \\
   -F "do_cell_matching=true" \\
   -F "num_threads=32"
+''',
+        "example_curl_batching": '''curl -X POST "http://localhost:8000/parse/file" \\
+  -F "file=@document.pdf" \\
+  -F "num_threads=64" \\
+  -F "layout_batch_size=16" \\
+  -F "table_batch_size=16" \\
+  -F "queue_max_size=500" \\
+  -F "batch_timeout_seconds=3.0"
 ''',
         "example_python": '''import requests
 

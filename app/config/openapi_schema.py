@@ -23,18 +23,20 @@ def get_custom_openapi(app):
     
     openapi_schema = get_openapi(
         title="Q-Structurize API",
-        version="2.1.0",
+        version="2.2.0",
         description="""
 # Q-Structurize - Advanced PDF Parsing API
 
-Powered by Docling StandardPdfPipeline with **configurable per-request options**.
+Powered by Docling ThreadedPdfPipeline with **batching and configurable per-request options**.
 
 ## Key Features
 
 - 📐 **Layout Analysis** - Document structure understanding (DocLayNet)
 - 📊 **Configurable Table Extraction** - FAST or ACCURATE modes (TableFormer)
 - 🔍 **Optional OCR** - Multi-language support for scanned documents (EasyOCR)
-- ⚡ **Multi-threaded** - Optimized for 72-core Xeon 6960P (1-144 threads)
+- 🚀 **Batched Processing** - Process multiple pages/operations in parallel
+- 🎚️ **Backpressure Control** - Queue management for large documents
+- ⚡ **Multi-threaded** - Optimized for 2x 72-core Xeon 6960P (144 threads)
 - ⚙️ **Per-Request Configuration** - Customize pipeline for each document
 - 🔄 **Structured Output** - Clean markdown format
 
@@ -54,14 +56,24 @@ curl -X POST "http://localhost:8878/parse/file" \\
   -F "num_threads=16"
 ```
 
-### 3. High Performance (Leverage 72-core CPU)
+### 3. High Performance (Leverage 144-core CPU)
 ```bash
 curl -X POST "http://localhost:8878/parse/file" \\
   -F "file=@document.pdf" \\
   -F "num_threads=64"
 ```
 
-### 4. Complex Tables (Accurate Mode)
+### 4. Maximum Throughput with Batching
+```bash
+curl -X POST "http://localhost:8878/parse/file" \\
+  -F "file=@large-document.pdf" \\
+  -F "num_threads=64" \\
+  -F "layout_batch_size=16" \\
+  -F "table_batch_size=16" \\
+  -F "queue_max_size=500"
+```
+
+### 5. Complex Tables (Accurate Mode)
 ```bash
 curl -X POST "http://localhost:8878/parse/file" \\
   -F "file=@tables.pdf" \\
@@ -69,7 +81,7 @@ curl -X POST "http://localhost:8878/parse/file" \\
   -F "do_cell_matching=true"
 ```
 
-### 5. Multilingual Document
+### 6. Multilingual Document
 ```bash
 curl -X POST "http://localhost:8878/parse/file" \\
   -F "file=@multilingual.pdf" \\
@@ -86,11 +98,23 @@ curl -X POST "http://localhost:8878/parse/file" \\
 
 ## Hardware Optimization
 
-This API is optimized for **72-core Xeon 6960P** processors:
+This API is optimized for **2x 72-core Xeon 6960P** (144 total cores) with batching support:
+
+**Threading:**
 - Default: 8 threads (balanced)
 - Light load: 8-16 threads
 - High performance: 32-64 threads
 - Maximum: 64-144 threads
+
+**Batching (for high throughput):**
+- Low latency: batch_size=1-2
+- Balanced: batch_size=4-8 (default: 4)
+- High throughput: batch_size=8-16
+- Maximum: batch_size=16-32 (requires more memory)
+
+**Queue Management:**
+- Small documents: queue_max_size=50-100 (default: 100)
+- Large documents: queue_max_size=300-1000
 
 ## Language Support
 
