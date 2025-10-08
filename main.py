@@ -16,6 +16,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Enable DEBUG logging for Docling's internal components to see profiling
+logging.getLogger('docling').setLevel(logging.DEBUG)
+logging.getLogger('docling.backend').setLevel(logging.DEBUG)
+logging.getLogger('docling.pipeline').setLevel(logging.DEBUG)
+
 # Initialize services
 pdf_optimizer = PDFOptimizer()
 docling_parser = DoclingParser()
