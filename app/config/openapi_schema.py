@@ -50,21 +50,32 @@ curl -X POST "http://localhost:8878/parse/file" \\
 ```bash
 curl -X POST "http://localhost:8878/parse/file" \\
   -F "file=@scanned.pdf" \\
-  -F 'pipeline_options={"enable_ocr": true, "ocr_languages": ["en"], "num_threads": 16}'
+  -F "enable_ocr=true" \\
+  -F "num_threads=16"
 ```
 
 ### 3. High Performance (Leverage 72-core CPU)
 ```bash
 curl -X POST "http://localhost:8878/parse/file" \\
   -F "file=@document.pdf" \\
-  -F 'pipeline_options={"num_threads": 64}'
+  -F "num_threads=64"
 ```
 
 ### 4. Complex Tables (Accurate Mode)
 ```bash
 curl -X POST "http://localhost:8878/parse/file" \\
   -F "file=@tables.pdf" \\
-  -F 'pipeline_options={"table_mode": "accurate", "do_cell_matching": true}'
+  -F "table_mode=accurate" \\
+  -F "do_cell_matching=true"
+```
+
+### 5. Multilingual Document
+```bash
+curl -X POST "http://localhost:8878/parse/file" \\
+  -F "file=@multilingual.pdf" \\
+  -F "enable_ocr=true" \\
+  -F "ocr_languages=en,es,de" \\
+  -F "num_threads=16"
 ```
 
 ## Configuration Guide

@@ -1,11 +1,11 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from typing import Optional
 from pydantic import BaseModel
+from enum import Enum
 import logging
-import json
 from app.services.pdf_optimizer import PDFOptimizer
 from app.services.docling_parser import DoclingParser
-from app.models.schemas import PipelineOptions
+from app.models.schemas import PipelineOptions, TableMode, AcceleratorDevice
 from app.config import PIPELINE_OPTIONS_CONFIG, get_custom_openapi
 
 # Configure logging
@@ -60,42 +60,14 @@ async def parse_pdf_file(
     file: UploadFile = File(..., description="PDF file to parse", media_type="application/pdf"),
     max_tokens_per_chunk: int = Form(512, description="Maximum tokens per chunk (reserved for future use)"),
     optimize_pdf: bool = Form(True, description="Whether to optimize PDF for better text extraction"),
-    pipeline_options: Optional[str] = Form(
-        None, 
-        description='Pipeline options as JSON string. See GET /parsers/options for all available options.',
-        openapi_examples={
-            "default": {
-                "summary": "Default (Fast, No OCR)",
-                "description": "Use default settings - fastest processing",
-                "value": None
-            },
-            "with_ocr": {
-                "summary": "Enable OCR",
-                "description": "For scanned documents",
-                "value": '{"enable_ocr": true, "ocr_languages": ["en"], "num_threads": 16}'
-            },
-            "accurate_tables": {
-                "summary": "Accurate Tables",
-                "description": "For complex table structures",
-                "value": '{"table_mode": "accurate", "do_cell_matching": true, "num_threads": 24}'
-            },
-            "high_performance": {
-                "summary": "High Performance",
-                "description": "Maximum speed on 72-core Xeon",
-                "value": '{"num_threads": 64, "table_mode": "fast"}'
-            },
-            "multilingual": {
-                "summary": "Multilingual OCR",
-                "description": "For documents with multiple languages",
-                "value": '{"enable_ocr": true, "ocr_languages": ["en", "es", "de"], "num_threads": 16}'
-            },
-            "complete": {
-                "summary": "Complete Extraction",
-                "description": "OCR + Accurate tables + Multi-threading",
-                "value": '{"enable_ocr": true, "ocr_languages": ["en"], "table_mode": "accurate", "do_cell_matching": true, "num_threads": 32}'
-            }
-        }
-    )
+    # Pipeline options as individual parameters
+    enable_ocr: bool = Form(False, description="Enable OCR for scanned documents and images"),
+    ocr_languages: str = Form("en", description="Comma-separated OCR language codes (e.g., 'en', 'en,es,de')"),
+    table_mode: TableMode = Form(TableMode.FAST, description="Table extraction mode: 'fast' or 'accurate'"),
+    do_table_structure: bool = Form(True, description="Enable table structure extraction"),
+    do_cell_matching: bool = Form(True, description="Enable cell matching for better table accuracy"),
+    num_threads: int = Form(8, ge=1, le=144, description="Number of processing threads (1-144, optimized for 72-core Xeon)"),
+    accelerator_device: AcceleratorDevice = Form(AcceleratorDevice.CPU, description="Accelerator device: 'cpu', 'cuda', or 'auto'")
 ):
     """
     Parse PDF file using Docling's StandardPdfPipeline with configurable options.
@@ -118,25 +90,36 @@ async def parse_pdf_file(
     
     **Parameters:**
     - **file**: PDF file to parse (required)
-    - **max_tokens_per_chunk**: Maximum tokens per chunk (reserved for future use)
     - **optimize_pdf**: Whether to optimize PDF for better text extraction (default: true)
-    - **pipeline_options**: JSON string with pipeline configuration (optional):
-      - `enable_ocr`: Enable OCR (default: false)
-      - `ocr_languages`: Language codes, e.g., ["en", "es"] (default: ["en"])
-      - `table_mode`: "fast" or "accurate" (default: "fast")
-      - `do_table_structure`: Enable table extraction (default: true)
-      - `do_cell_matching`: Enable cell matching (default: true)
-      - `num_threads`: Number of threads 1-144 (default: 8)
-      - `accelerator_device`: "cpu", "cuda", or "auto" (default: "cpu")
+    - **enable_ocr**: Enable OCR for scanned documents (default: false)
+    - **ocr_languages**: Comma-separated language codes (default: "en", e.g., "en,es,de")
+    - **table_mode**: Table extraction mode "fast" or "accurate" (default: "fast")
+    - **do_table_structure**: Enable table extraction (default: true)
+    - **do_cell_matching**: Enable cell matching (default: true)
+    - **num_threads**: Number of threads 1-144 (default: 8)
+    - **accelerator_device**: Device selection "cpu", "cuda", or "auto" (default: "cpu")
     
-    **Example pipeline_options:**
-    ```json
-    {
-        "enable_ocr": true,
-        "ocr_languages": ["en"],
-        "table_mode": "accurate",
-        "num_threads": 16
-    }
+    **Example Usage:**
+    
+    Default (fast processing):
+    ```bash
+    curl -X POST "http://localhost:8878/parse/file" -F "file=@document.pdf"
+    ```
+    
+    With OCR enabled:
+    ```bash
+    curl -X POST "http://localhost:8878/parse/file" \\
+      -F "file=@document.pdf" \\
+      -F "enable_ocr=true" \\
+      -F "num_threads=16"
+    ```
+    
+    High performance with accurate tables:
+    ```bash
+    curl -X POST "http://localhost:8878/parse/file" \\
+      -F "file=@document.pdf" \\
+      -F "table_mode=accurate" \\
+      -F "num_threads=64"
     ```
     
     **Returns:**
@@ -151,29 +134,35 @@ async def parse_pdf_file(
     
     try:
         # ========================================
-        # PARSE PIPELINE OPTIONS (if provided)
+        # BUILD PIPELINE OPTIONS from individual parameters
         # ========================================
-        parsed_options = None
-        if pipeline_options:
-            try:
-                options_dict = json.loads(pipeline_options)
-                # Validate using Pydantic model
-                validated_options = PipelineOptions(**options_dict)
-                # Convert to dict for passing to parser
-                parsed_options = validated_options.model_dump()
-                logger.info(f"Using custom pipeline options: {parsed_options}")
-            except json.JSONDecodeError as e:
-                raise HTTPException(status_code=400, detail=f"Invalid JSON in pipeline_options: {str(e)}")
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Invalid pipeline_options: {str(e)}")
-        else:
-            logger.info("Using default pipeline options")
+        # Parse comma-separated language codes into list
+        ocr_lang_list = [lang.strip() for lang in ocr_languages.split(',') if lang.strip()]
+        
+        # Build options dictionary
+        options_dict = {
+            "enable_ocr": enable_ocr,
+            "ocr_languages": ocr_lang_list,
+            "table_mode": table_mode.value,  # Convert enum to string
+            "do_table_structure": do_table_structure,
+            "do_cell_matching": do_cell_matching,
+            "num_threads": num_threads,
+            "accelerator_device": accelerator_device.value  # Convert enum to string
+        }
+        
+        # Validate using Pydantic model
+        try:
+            validated_options = PipelineOptions(**options_dict)
+            parsed_options = validated_options.model_dump()
+            logger.info(f"Using pipeline options: OCR={enable_ocr}, threads={num_threads}, table_mode={table_mode.value}")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid pipeline options: {str(e)}")
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error parsing pipeline options: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Error parsing pipeline options: {str(e)}")
+        logger.error(f"Error building pipeline options: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Error building pipeline options: {str(e)}")
     
     try:
         # ========================================

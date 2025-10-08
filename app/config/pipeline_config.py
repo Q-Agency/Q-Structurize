@@ -110,10 +110,19 @@ PIPELINE_OPTIONS_CONFIG = {
         }
     },
     "usage": {
-        "note": "Pass options as JSON string in the 'pipeline_options' form field",
+        "note": "Pass options as individual form fields",
         "example_curl": '''curl -X POST "http://localhost:8000/parse/file" \\
   -F "file=@document.pdf" \\
-  -F 'pipeline_options={"enable_ocr": true, "num_threads": 16}'
+  -F "enable_ocr=true" \\
+  -F "num_threads=16"
+''',
+        "example_curl_advanced": '''curl -X POST "http://localhost:8000/parse/file" \\
+  -F "file=@document.pdf" \\
+  -F "enable_ocr=true" \\
+  -F "ocr_languages=en,es,de" \\
+  -F "table_mode=accurate" \\
+  -F "do_cell_matching=true" \\
+  -F "num_threads=32"
 ''',
         "example_python": '''import requests
 
@@ -121,7 +130,9 @@ response = requests.post(
     "http://localhost:8000/parse/file",
     files={"file": open("document.pdf", "rb")},
     data={
-        "pipeline_options": '{"enable_ocr": true, "num_threads": 16, "table_mode": "accurate"}'
+        "enable_ocr": "true",
+        "num_threads": "16",
+        "table_mode": "accurate"
     }
 )
 '''
