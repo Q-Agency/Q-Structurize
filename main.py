@@ -7,14 +7,8 @@ from app.services.docling_parser import DoclingParser
 from app.config import PIPELINE_OPTIONS_CONFIG, get_custom_openapi
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Enable DEBUG logging for Docling to see pipeline timing details
-logging.getLogger('docling').setLevel(logging.DEBUG)
 
 # Initialize services
 pdf_optimizer = PDFOptimizer()
