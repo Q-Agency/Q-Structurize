@@ -74,24 +74,34 @@ class DoclingParser:
             self.converter = None
             return
         
-        # Set default configuration
+        # Read configuration from environment variables (set in Dockerfile)
+        # This allows changing all settings by editing Dockerfile and rebuilding
         self.default_config = config or {
-            "enable_ocr": False,
-            "ocr_languages": ["en"],
-            "table_mode": "fast",
-            "do_table_structure": False,  # Disabled by default for speed
-            "do_cell_matching": False,
-            "num_threads": int(os.environ.get('OMP_NUM_THREADS', '100')),  # Use most of your 144 cores
-            "accelerator_device": "cpu",
-            "do_code_enrichment": False,
-            "do_formula_enrichment": False,
-            "do_picture_classification": False,
-            "do_picture_description": False,
-            "layout_batch_size": 32,
-            "ocr_batch_size": 32,
-            "table_batch_size": 32,
-            "queue_max_size": 1000,
-            "batch_timeout_seconds": 0.5
+            # OCR Configuration
+            "enable_ocr": os.environ.get('DOCLING_ENABLE_OCR', 'false').lower() == 'true',
+            "ocr_languages": [lang.strip() for lang in os.environ.get('DOCLING_OCR_LANGUAGES', 'en').split(',')],
+            
+            # Table Extraction Configuration
+            "do_table_structure": os.environ.get('DOCLING_DO_TABLE_STRUCTURE', 'false').lower() == 'true',
+            "table_mode": os.environ.get('DOCLING_TABLE_MODE', 'fast'),
+            "do_cell_matching": os.environ.get('DOCLING_DO_CELL_MATCHING', 'false').lower() == 'true',
+            
+            # Enrichment Options
+            "do_code_enrichment": os.environ.get('DOCLING_DO_CODE_ENRICHMENT', 'false').lower() == 'true',
+            "do_formula_enrichment": os.environ.get('DOCLING_DO_FORMULA_ENRICHMENT', 'false').lower() == 'true',
+            "do_picture_classification": os.environ.get('DOCLING_DO_PICTURE_CLASSIFICATION', 'false').lower() == 'true',
+            "do_picture_description": os.environ.get('DOCLING_DO_PICTURE_DESCRIPTION', 'false').lower() == 'true',
+            
+            # Threading and Acceleration
+            "num_threads": int(os.environ.get('OMP_NUM_THREADS', '100')),
+            "accelerator_device": os.environ.get('DOCLING_ACCELERATOR_DEVICE', 'cpu'),
+            
+            # Batching Configuration (ThreadedPdfPipelineOptions)
+            "layout_batch_size": int(os.environ.get('DOCLING_LAYOUT_BATCH_SIZE', '32')),
+            "ocr_batch_size": int(os.environ.get('DOCLING_OCR_BATCH_SIZE', '32')),
+            "table_batch_size": int(os.environ.get('DOCLING_TABLE_BATCH_SIZE', '32')),
+            "queue_max_size": int(os.environ.get('DOCLING_QUEUE_MAX_SIZE', '1000')),
+            "batch_timeout_seconds": float(os.environ.get('DOCLING_BATCH_TIMEOUT', '0.5'))
         }
         
         # Create pipeline options with default configuration
@@ -100,12 +110,22 @@ class DoclingParser:
         # CRITICAL: Initialize converter ONCE at startup
         logger.info("============================================================")
         logger.info("🚀 Initializing Docling DocumentConverter (ONE-TIME SETUP)")
-        logger.info("⚙️  Default Configuration:")
-        logger.info(f"   - Threads: {pipeline_options.accelerator_options.num_threads}")
-        logger.info(f"   - Layout Batch Size: {pipeline_options.layout_batch_size}")
-        logger.info(f"   - Queue Max Size: {pipeline_options.queue_max_size}")
-        logger.info(f"   - OCR: {'Enabled' if pipeline_options.do_ocr else 'Disabled'}")
-        logger.info(f"   - Tables: {'Enabled' if pipeline_options.do_table_structure else 'Disabled'}")
+        logger.info("⚙️  Configuration (from Dockerfile ENV):")
+        logger.info(f"   📊 Threading:")
+        logger.info(f"      - Threads: {pipeline_options.accelerator_options.num_threads} (OMP_NUM_THREADS)")
+        logger.info(f"      - Device: {pipeline_options.accelerator_options.device}")
+        logger.info(f"   🚀 Batching:")
+        logger.info(f"      - Layout Batch: {pipeline_options.layout_batch_size}")
+        logger.info(f"      - OCR Batch: {pipeline_options.ocr_batch_size}")
+        logger.info(f"      - Table Batch: {pipeline_options.table_batch_size}")
+        logger.info(f"      - Queue Max: {pipeline_options.queue_max_size}")
+        logger.info(f"      - Batch Timeout: {pipeline_options.batch_timeout_seconds}s")
+        logger.info(f"   📝 Features:")
+        logger.info(f"      - OCR: {'✅ Enabled' if pipeline_options.do_ocr else '❌ Disabled'} {f'({self.default_config[\"ocr_languages\"]})' if pipeline_options.do_ocr else ''}")
+        logger.info(f"      - Tables: {'✅ Enabled' if pipeline_options.do_table_structure else '❌ Disabled'} {f'({self.default_config[\"table_mode\"]})' if pipeline_options.do_table_structure else ''}")
+        logger.info(f"      - Code Enrichment: {'✅' if pipeline_options.do_code_enrichment else '❌'}")
+        logger.info(f"      - Formula Enrichment: {'✅' if pipeline_options.do_formula_enrichment else '❌'}")
+        logger.info(f"      - Picture Classification: {'✅' if pipeline_options.do_picture_classification else '❌'}")
         
         init_start = time.time()
         
@@ -184,21 +204,12 @@ class DoclingParser:
         
         return pipeline_options
     
-    def parse_pdf(self, pdf_content: bytes, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def parse_pdf(self, pdf_content: bytes) -> Dict[str, Any]:
         """
         Parse PDF content using the pre-initialized converter.
         
-        IMPORTANT: Runtime options are currently ignored because the converter
-        is pre-initialized. To support dynamic options, the converter would need
-        to be re-initialized (expensive) or we'd need to create a pool of converters
-        with different configurations.
-        
-        Args:
-            pdf_content: Raw PDF bytes
-            options: Parsing options (currently ignored - uses default config)
-        
-        Returns:
-            Dictionary with success status, content, and error info
+        Configuration is set at container startup. To change settings, update 
+        Dockerfile ENV variables and rebuild (takes ~10 seconds with cache).
         """
         if not DOCLING_AVAILABLE or self.converter is None:
             return {
@@ -206,11 +217,6 @@ class DoclingParser:
                 "error": "Docling is not available",
                 "content": None
             }
-        
-        # Log warning if user provided options (they will be ignored)
-        if options:
-            logger.warning("⚠️  Runtime options are ignored. Using default configuration from initialization.")
-            logger.warning("    To change configuration, restart the service with new defaults.")
         
         try:
             # Log start

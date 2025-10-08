@@ -1,11 +1,9 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from typing import Optional
 from pydantic import BaseModel
-from enum import Enum
 import logging
 from app.services.pdf_optimizer import PDFOptimizer
 from app.services.docling_parser import DoclingParser
-from app.models.schemas import PipelineOptions, TableMode, AcceleratorDevice
 from app.config import PIPELINE_OPTIONS_CONFIG, get_custom_openapi
 
 # Configure logging
@@ -58,99 +56,43 @@ app = FastAPI(
           })
 async def parse_pdf_file(
     file: UploadFile = File(..., description="PDF file to parse", media_type="application/pdf"),
-    max_tokens_per_chunk: int = Form(512, description="Maximum tokens per chunk (reserved for future use)"),
-    optimize_pdf: bool = Form(True, description="Whether to optimize PDF for better text extraction"),
-    # Pipeline options as individual parameters
-    enable_ocr: bool = Form(False, description="Enable OCR for scanned documents and images"),
-    ocr_languages: str = Form("en", description="Comma-separated OCR language codes (e.g., 'en', 'en,es,de')"),
-    table_mode: TableMode = Form(TableMode.FAST, description="Table extraction mode: 'fast' or 'accurate'"),
-    do_table_structure: bool = Form(True, description="Enable table structure extraction"),
-    do_cell_matching: bool = Form(True, description="Enable cell matching for better table accuracy"),
-    num_threads: int = Form(8, ge=1, le=144, description="Number of processing threads (1-144, optimized for 72-core Xeon)"),
-    accelerator_device: AcceleratorDevice = Form(AcceleratorDevice.CPU, description="Accelerator device: 'cpu', 'cuda', or 'auto'"),
-    # Enrichment options (advanced features, increase processing time)
-    do_code_enrichment: bool = Form(False, description="Enable code block language detection and parsing"),
-    do_formula_enrichment: bool = Form(False, description="Enable formula analysis and LaTeX extraction"),
-    do_picture_classification: bool = Form(False, description="Enable image classification (charts, diagrams, logos, etc.)"),
-    do_picture_description: bool = Form(False, description="Enable AI-powered image description (requires VLM, significantly increases processing time)"),
-    # ThreadedPdfPipeline batching options (performance tuning)
-    layout_batch_size: int = Form(4, ge=1, le=32, description="Batch size for layout detection (1-32, higher = more throughput, more memory)"),
-    ocr_batch_size: int = Form(4, ge=1, le=32, description="Batch size for OCR processing (1-32, higher = more throughput, more memory)"),
-    table_batch_size: int = Form(4, ge=1, le=32, description="Batch size for table extraction (1-32, higher = more throughput, more memory)"),
-    queue_max_size: int = Form(100, ge=10, le=1000, description="Maximum queue size for backpressure control (10-1000)"),
-    batch_timeout_seconds: float = Form(2.0, ge=0.1, le=30.0, description="Batch processing timeout in seconds (0.1-30.0)")
+    optimize_pdf: bool = Form(True, description="Whether to optimize PDF for better text extraction")
 ):
     """
-    Parse PDF file using Docling's StandardPdfPipeline with ThreadedPdfPipelineOptions for batched processing.
+    Parse PDF file using pre-initialized Docling pipeline with optimized settings.
     
-    This endpoint processes PDF files using Docling's StandardPdfPipeline with ThreadedPdfPipelineOptions which enables:
-    - **Layout Detection**: Document structure analysis using DocLayNet model
-    - **Text Extraction**: High-quality text extraction from PDF layers
-    - **OCR Processing**: Optional text extraction from images and scanned documents using EasyOCR
-    - **Table Extraction**: Accurate table structure preservation using TableFormer
-    - **Batched Processing**: Process multiple pages/operations in parallel
-    - **Backpressure Control**: Queue management to prevent memory overflow
-    - **Structured Output**: Clean markdown with proper formatting
-    
-    **Features:**
-    - 📐 **Layout Analysis**: Understands document structure (headings, paragraphs, lists)
-    - 📊 **Table Extraction**: Configurable FAST or ACCURATE modes
-    - 🔍 **OCR Support**: Optional with multi-language support
-    - 📄 **PDF Optimization**: Pre-processing for better results  
-    - 🔄 **Structured Output**: Clean markdown format
-    - ⚡ **Multi-threading**: Optimized for 2x 72-core Xeon 6960P (144 cores)
-    - 🚀 **Batched Processing**: Parallel processing for better throughput
-    - 🎚️ **Backpressure Control**: Queue management for large documents
-    - ⚙️ **Per-request Configuration**: Customize pipeline per document
+    **Configuration is set at container startup via Dockerfile ENV variables.**
+    This approach provides:
+    - 🚀 **Instant Processing**: Pre-loaded models, no initialization delay
+    - ⚡ **Consistent Performance**: Same optimized settings for all requests  
+    - 📐 **Layout Analysis**: Document structure (headings, paragraphs, lists)
+    - 📄 **PDF Optimization**: Optional pre-processing for better extraction
+    - 🔄 **Clean Output**: Structured markdown format
     
     **Parameters:**
     - **file**: PDF file to parse (required)
-    - **optimize_pdf**: Whether to optimize PDF for better text extraction (default: true)
-    - **enable_ocr**: Enable OCR for scanned documents (default: false)
-    - **ocr_languages**: Comma-separated language codes (default: "en", e.g., "en,es,de")
-    - **table_mode**: Table extraction mode "fast" or "accurate" (default: "fast")
-    - **do_table_structure**: Enable table extraction (default: true)
-    - **do_cell_matching**: Enable cell matching (default: true)
-    - **num_threads**: Number of threads 1-144 (default: 8)
-    - **accelerator_device**: Device selection "cpu", "cuda", or "auto" (default: "cpu")
-    - **layout_batch_size**: Batch size for layout detection 1-32 (default: 4)
-    - **ocr_batch_size**: Batch size for OCR processing 1-32 (default: 4)
-    - **table_batch_size**: Batch size for table extraction 1-32 (default: 4)
-    - **queue_max_size**: Queue size for backpressure control 10-1000 (default: 100)
-    - **batch_timeout_seconds**: Batch timeout 0.1-30.0 seconds (default: 2.0)
+    - **optimize_pdf**: Pre-process PDF for better text extraction (default: true)
+    
+    **Configuration (Dockerfile ENV):**
+    To change processing settings, update these ENV variables in Dockerfile and rebuild (takes ~10 seconds):
+    - `OMP_NUM_THREADS`: Number of processing threads (default: 100, max: 144)
+    - OCR, table extraction, and batching settings in parser initialization
     
     **Example Usage:**
-    
-    Default (fast processing):
     ```bash
+    # Simple parsing
     curl -X POST "http://localhost:8878/parse/file" -F "file=@document.pdf"
-    ```
     
-    With OCR enabled:
-    ```bash
+    # Without PDF optimization (faster but may miss some text)
     curl -X POST "http://localhost:8878/parse/file" \\
       -F "file=@document.pdf" \\
-      -F "enable_ocr=true" \\
-      -F "num_threads=16"
+      -F "optimize_pdf=false"
     ```
     
-    High performance with accurate tables:
-    ```bash
-    curl -X POST "http://localhost:8878/parse/file" \\
-      -F "file=@document.pdf" \\
-      -F "table_mode=accurate" \\
-      -F "num_threads=64"
-    ```
-    
-    Maximum throughput with batching:
-    ```bash
-    curl -X POST "http://localhost:8878/parse/file" \\
-      -F "file=@document.pdf" \\
-      -F "num_threads=64" \\
-      -F "layout_batch_size=16" \\
-      -F "table_batch_size=16" \\
-      -F "queue_max_size=500"
-    ```
+    **To Change Configuration:**
+    1. Edit Dockerfile ENV variables or parser initialization
+    2. Rebuild: `docker-compose build` (~10 seconds with cache)
+    3. Restart: `docker-compose up`
     
     **Returns:**
     - Structured markdown content
@@ -161,49 +103,6 @@ async def parse_pdf_file(
     # Validate file type
     if not file.content_type or not file.content_type.startswith('application/pdf'):
         raise HTTPException(status_code=415, detail="File must be a PDF")
-    
-    try:
-        # ========================================
-        # BUILD PIPELINE OPTIONS from individual parameters
-        # ========================================
-        # Parse comma-separated language codes into list
-        ocr_lang_list = [lang.strip() for lang in ocr_languages.split(',') if lang.strip()]
-        
-        # Build options dictionary
-        options_dict = {
-            "enable_ocr": enable_ocr,
-            "ocr_languages": ocr_lang_list,
-            "table_mode": table_mode.value,  # Convert enum to string
-            "do_table_structure": do_table_structure,
-            "do_cell_matching": do_cell_matching,
-            "num_threads": num_threads,
-            "accelerator_device": accelerator_device.value,  # Convert enum to string
-            # Enrichment options
-            "do_code_enrichment": do_code_enrichment,
-            "do_formula_enrichment": do_formula_enrichment,
-            "do_picture_classification": do_picture_classification,
-            "do_picture_description": do_picture_description,
-            # ThreadedPdfPipeline batching options
-            "layout_batch_size": layout_batch_size,
-            "ocr_batch_size": ocr_batch_size,
-            "table_batch_size": table_batch_size,
-            "queue_max_size": queue_max_size,
-            "batch_timeout_seconds": batch_timeout_seconds
-        }
-        
-        # Validate using Pydantic model
-        try:
-            validated_options = PipelineOptions(**options_dict)
-            parsed_options = validated_options.model_dump()
-            logger.info(f"Using pipeline options: OCR={enable_ocr}, threads={num_threads}, table_mode={table_mode.value}")
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid pipeline options: {str(e)}")
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error building pipeline options: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Error building pipeline options: {str(e)}")
     
     try:
         # ========================================
@@ -234,8 +133,8 @@ async def parse_pdf_file(
                 detail="Docling parser is not available. Please check dependencies."
             )
         
-        logger.info("Starting PDF parsing with Docling (batched mode)...")
-        parse_result = docling_parser.parse_pdf(pdf_content, options=parsed_options)
+        logger.info("Starting PDF parsing with pre-initialized Docling converter...")
+        parse_result = docling_parser.parse_pdf(pdf_content)
         
         if not parse_result["success"]:
             raise HTTPException(
@@ -245,7 +144,7 @@ async def parse_pdf_file(
         
         # Return successful parsing result
         return ParseResponse(
-            message="PDF parsed successfully using batched processing",
+            message="PDF parsed successfully using pre-initialized converter",
             status="success",
             content=parse_result["content"]
         )
@@ -268,14 +167,12 @@ async def root():
         "status": "healthy",
         "features": [
             "PDF optimization",
-            "Docling StandardPdfPipeline with ThreadedPdfPipelineOptions",
-            "Configurable pipeline options per request",
-            "Layout analysis",
-            "Optional OCR with multi-language support",
-            "Configurable table extraction (fast/accurate)",
-            "Batched processing for better throughput",
-            "Backpressure control for large documents",
-            "Multi-threaded processing (optimized for 2x 72-core Xeon 6960P)"
+            "Pre-initialized Docling converter for instant processing",
+            "Layout analysis and document structure extraction",
+            "Batched processing with ThreadedPdfPipelineOptions",
+            "ENV-based configuration (modify Dockerfile and rebuild)",
+            "Multi-threaded processing (optimized for 2x 72-core Xeon 6960P)",
+            "Structured markdown output"
         ],
         "version": "2.2.0",
         "endpoints": {

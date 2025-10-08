@@ -11,7 +11,6 @@ ENV PYTHONUNBUFFERED=1 \
     # Tokenizers - disable parallelism to avoid fork warnings
     TOKENIZERS_PARALLELISM=true \
     # CPU threading optimizations for 2x Xeon 6960P (144 cores total)
-    # 8 workers × 18 threads = 144 total threads (1:1 with cores)
     OMP_NUM_THREADS=100 \
     MKL_NUM_THREADS=100 \
     OPENBLAS_NUM_THREADS=100 \
@@ -23,6 +22,22 @@ ENV PYTHONUNBUFFERED=1 \
     KMP_AFFINITY="granularity=fine,compact,1,0" \
     # Memory optimization
     MALLOC_ARENA_MAX=4 \
+    # Docling Parser Configuration
+    DOCLING_ENABLE_OCR=false \
+    DOCLING_OCR_LANGUAGES=en \
+    DOCLING_DO_TABLE_STRUCTURE=false \
+    DOCLING_TABLE_MODE=fast \
+    DOCLING_DO_CELL_MATCHING=false \
+    DOCLING_DO_CODE_ENRICHMENT=false \
+    DOCLING_DO_FORMULA_ENRICHMENT=false \
+    DOCLING_DO_PICTURE_CLASSIFICATION=false \
+    DOCLING_DO_PICTURE_DESCRIPTION=false \
+    DOCLING_LAYOUT_BATCH_SIZE=32 \
+    DOCLING_OCR_BATCH_SIZE=32 \
+    DOCLING_TABLE_BATCH_SIZE=32 \
+    DOCLING_QUEUE_MAX_SIZE=1000 \
+    DOCLING_BATCH_TIMEOUT=0.5 \
+    DOCLING_ACCELERATOR_DEVICE=cpu \
     # Docling models cache (where docling-tools downloads models)
     DOCLING_ARTIFACTS_PATH=/root/.cache/docling/models \
     # HuggingFace cache

@@ -27,100 +27,69 @@ def get_custom_openapi(app):
         description="""
 # Q-Structurize - Advanced PDF Parsing API
 
-Powered by Docling StandardPdfPipeline with **ThreadedPdfPipelineOptions for batching and configurable per-request options**.
+Powered by **pre-initialized Docling converter** with ThreadedPdfPipelineOptions for **instant processing**.
 
 ## Key Features
 
+- 🚀 **Instant Processing** - Pre-loaded models, zero initialization delay
 - 📐 **Layout Analysis** - Document structure understanding (DocLayNet)
-- 📊 **Configurable Table Extraction** - FAST or ACCURATE modes (TableFormer)
-- 🔍 **Optional OCR** - Multi-language support for scanned documents (EasyOCR)
-- 🚀 **Batched Processing** - Process multiple pages/operations in parallel
-- 🎚️ **Backpressure Control** - Queue management for large documents
+- 🎚️ **Batched Processing** - Parallel page/operation processing
 - ⚡ **Multi-threaded** - Optimized for 2x 72-core Xeon 6960P (144 threads)
-- ⚙️ **Per-Request Configuration** - Customize pipeline for each document
 - 🔄 **Structured Output** - Clean markdown format
+- ⚙️ **ENV-Based Config** - Set once at container startup, rebuild in ~10 seconds
 
 ## Quick Examples
 
-### 1. Default Processing (Fast, No OCR)
+### 1. Simple PDF Parsing
 ```bash
 curl -X POST "http://localhost:8878/parse/file" \\
   -F "file=@document.pdf"
 ```
 
-### 2. Scanned Document with OCR
-```bash
-curl -X POST "http://localhost:8878/parse/file" \\
-  -F "file=@scanned.pdf" \\
-  -F "enable_ocr=true" \\
-  -F "num_threads=16"
-```
-
-### 3. High Performance (Leverage 144-core CPU)
+### 2. Without PDF Optimization (Faster)
 ```bash
 curl -X POST "http://localhost:8878/parse/file" \\
   -F "file=@document.pdf" \\
-  -F "num_threads=64"
+  -F "optimize_pdf=false"
 ```
 
-### 4. Maximum Throughput with Batching
-```bash
-curl -X POST "http://localhost:8878/parse/file" \\
-  -F "file=@large-document.pdf" \\
-  -F "num_threads=64" \\
-  -F "layout_batch_size=16" \\
-  -F "table_batch_size=16" \\
-  -F "queue_max_size=500"
+### 3. Python Example
+```python
+import requests
+
+with open("document.pdf", "rb") as f:
+    response = requests.post(
+        "http://localhost:8878/parse/file",
+        files={"file": f}
+    )
+print(response.json()["content"])
 ```
 
-### 5. Complex Tables (Accurate Mode)
-```bash
-curl -X POST "http://localhost:8878/parse/file" \\
-  -F "file=@tables.pdf" \\
-  -F "table_mode=accurate" \\
-  -F "do_cell_matching=true"
-```
+## Configuration
 
-### 6. Multilingual Document
-```bash
-curl -X POST "http://localhost:8878/parse/file" \\
-  -F "file=@multilingual.pdf" \\
-  -F "enable_ocr=true" \\
-  -F "ocr_languages=en,es,de" \\
-  -F "num_threads=16"
-```
+Configuration is set via **Dockerfile ENV variables** at container startup. This provides:
+- ✅ **Instant processing** - No per-request initialization overhead
+- ✅ **Consistent performance** - Same optimized settings for all requests
+- ✅ **Fast reconfiguration** - Rebuild takes only ~10 seconds (Docker cache)
 
-## Configuration Guide
+### To Change Configuration:
 
-📖 Use **GET /parsers/options** to see all available configuration options with detailed descriptions and examples.
+1. **Edit Dockerfile** - Modify ENV variables or parser initialization
+2. **Rebuild** - `docker-compose build` (~10 seconds with cache)
+3. **Restart** - `docker-compose up`
 
-💡 Try the examples in the dropdown menu on the `/parse/file` endpoint below!
+### Key ENV Variables:
 
-## Hardware Optimization
+- `OMP_NUM_THREADS` - Number of processing threads (default: 100, max: 144)
+- Parser initialization in `docling_parser.py` - OCR, tables, batch sizes
 
-This API is optimized for **2x 72-core Xeon 6960P** (144 total cores) with batching support:
+### Hardware Optimization
 
-**Threading:**
-- Default: 8 threads (balanced)
-- Light load: 8-16 threads
-- High performance: 32-64 threads
-- Maximum: 64-144 threads
-
-**Batching (for high throughput):**
-- Low latency: batch_size=1-2
-- Balanced: batch_size=4-8 (default: 4)
-- High throughput: batch_size=8-16
-- Maximum: batch_size=16-32 (requires more memory)
-
-**Queue Management:**
-- Small documents: queue_max_size=50-100 (default: 100)
-- Large documents: queue_max_size=300-1000
-
-## Language Support
-
-Supported OCR languages: English, Spanish, German, French, Italian, Portuguese, Russian, Chinese, Japanese, Korean, and more.
-
-Example: `"ocr_languages": ["en", "es", "de"]`
+Optimized for **2x 72-core Xeon 6960P** (144 total cores):
+- Default: 100 threads (leaves headroom for system)
+- Maximum: 120-144 threads (full utilization)
+- Batch sizes: 32 (aggressive batching for throughput)
+- Queue: 1000 (large queue for big documents)
         """,
         routes=app.routes,
     )
