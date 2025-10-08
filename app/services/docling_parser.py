@@ -202,6 +202,14 @@ class DoclingParser:
             num_threads=user_options.get("num_threads", 120),
             device=device
         )
+
+        logger.info(
+            "Docling accelerator: device=%s, threads=%s | layout_batch=%s, table_batch=%s",
+            pipeline_options.accelerator_options.device,
+            pipeline_options.accelerator_options.num_threads,
+            pipeline_options.layout_batch_size,
+            pipeline_options.table_batch_size,
+        )
         
         # Enrichment options
         pipeline_options.do_code_enrichment = user_options.get("do_code_enrichment", False)
