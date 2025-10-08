@@ -36,9 +36,11 @@ try:
     from docling.pipeline.standard_pdf_pipeline import StandardPdfPipeline
     from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions, TableFormerMode
     from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
+    from docling.datamodel.settings import settings
     DOCLING_AVAILABLE = True
 except ImportError as e:
     DOCLING_AVAILABLE = False
+    settings = None
     InputFormat = None
     DocumentConverter = None
     PdfFormatOption = None
@@ -103,6 +105,11 @@ class DoclingParser:
             "queue_max_size": int(os.environ.get('DOCLING_QUEUE_MAX_SIZE', '1000')),
             "batch_timeout_seconds": float(os.environ.get('DOCLING_BATCH_TIMEOUT', '0.5'))
         }
+        
+        # Enable Docling's built-in pipeline profiling for detailed timing
+        if settings:
+            settings.debug.profile_pipeline_timings = True
+            logger.info("🔍 Docling pipeline profiling enabled")
         
         # Create pipeline options with default configuration
         pipeline_options = self._create_pipeline_options(self.default_config)
@@ -229,30 +236,48 @@ class DoclingParser:
             logger.info("------------------------------------------------------------")
             
             # Create temporary file for PDF content
+            file_write_start = time.time()
             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
                 tmp_file.write(pdf_content)
                 tmp_file.flush()
+                file_write_time = time.time() - file_write_start
+                logger.info(f"⏱️  Temp file write: {file_write_time:.3f}s")
                 
                 # Parse the PDF using pre-initialized converter
                 logger.info("⏳ Processing document...")
+                logger.info("   └─ Step 1: Document conversion (layout analysis, OCR, tables)")
                 processing_start = time.time()
                 
                 # CRITICAL: Reuse the pre-initialized converter
+                # This will trigger Docling's internal profiling logs
                 result = self.converter.convert(source=tmp_file.name)
                 
-                processing_time = time.time() - processing_start
-                
-                logger.info(f"✅ Processing completed in {processing_time:.2f} seconds")
+                conversion_time = time.time() - processing_start
+                logger.info(f"   ✅ Conversion complete: {conversion_time:.3f}s")
                 
                 # Extract content - export to markdown
+                logger.info("   └─ Step 2: Export to markdown")
+                export_start = time.time()
                 document = result.document
                 markdown_content = document.export_to_markdown()
+                export_time = time.time() - export_start
+                logger.info(f"   ✅ Export complete: {export_time:.3f}s")
                 
-                # Log statistics
-                logger.info(f"📊 Document Statistics:")
-                logger.info(f"   - Size: {len(markdown_content)} characters")
-                logger.info(f"   - Processing time: {processing_time:.2f}s")
-                logger.info(f"   - Throughput: {len(markdown_content)/processing_time:.0f} chars/sec")
+                total_time = time.time() - processing_start
+                
+                # Detailed timing breakdown
+                logger.info("📊 Performance Breakdown:")
+                logger.info(f"   ├─ File I/O:        {file_write_time:.3f}s ({file_write_time/total_time*100:.1f}%)")
+                logger.info(f"   ├─ Conversion:      {conversion_time:.3f}s ({conversion_time/total_time*100:.1f}%)")
+                logger.info(f"   │   └─ (Check logs above for Docling's detailed pipeline timings)")
+                logger.info(f"   ├─ Markdown Export: {export_time:.3f}s ({export_time/total_time*100:.1f}%)")
+                logger.info(f"   └─ TOTAL:           {total_time:.3f}s")
+                
+                # Document statistics
+                logger.info(f"📄 Document Statistics:")
+                logger.info(f"   ├─ Content size:    {len(markdown_content):,} characters")
+                logger.info(f"   ├─ Input size:      {len(pdf_content):,} bytes")
+                logger.info(f"   └─ Throughput:      {len(markdown_content)/total_time:.0f} chars/sec")
                 logger.info("============================================================")
                 
                 # Clean up temporary file
@@ -265,7 +290,13 @@ class DoclingParser:
                     "success": True,
                     "content": markdown_content,
                     "error": None,
-                    "processing_time": processing_time
+                    "processing_time": total_time,
+                    "timings": {
+                        "file_write": file_write_time,
+                        "conversion": conversion_time,
+                        "markdown_export": export_time,
+                        "total": total_time
+                    }
                 }
                 
         except Exception as e:
