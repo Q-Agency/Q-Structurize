@@ -7,7 +7,13 @@ from app.services.docling_parser import DoclingParser
 from app.config import PIPELINE_OPTIONS_CONFIG, get_custom_openapi
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+# Set to DEBUG to see Docling's internal pipeline profiling logs
+import os
+log_level = os.environ.get('LOG_LEVEL', 'DEBUG').upper()
+logging.basicConfig(
+    level=getattr(logging, log_level, logging.DEBUG),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Initialize services

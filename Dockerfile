@@ -35,7 +35,8 @@ RUN echo "Pre-downloading Docling models (optional)..." && \
 RUN ls -lah /root/.cache/docling/models || true
 
 # Runtime environment variables (change these without invalidating cache layers above)
-ENV TOKENIZERS_PARALLELISM=false \
+ENV LOG_LEVEL=DEBUG \
+    TOKENIZERS_PARALLELISM=false \
     OMP_NUM_THREADS=32 \
     MKL_NUM_THREADS=32 \
     OPENBLAS_NUM_THREADS=32 \
