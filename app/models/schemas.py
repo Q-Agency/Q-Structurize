@@ -53,6 +53,23 @@ class PipelineOptions(BaseModel):
         default=AcceleratorDevice.CPU,
         description="Accelerator device: 'cpu', 'cuda', or 'auto'"
     )
+    # Enrichment options (advanced features)
+    do_code_enrichment: bool = Field(
+        default=False,
+        description="Enable code block language detection and parsing"
+    )
+    do_formula_enrichment: bool = Field(
+        default=False,
+        description="Enable formula analysis and LaTeX extraction"
+    )
+    do_picture_classification: bool = Field(
+        default=False,
+        description="Enable image classification (charts, diagrams, logos, etc.)"
+    )
+    do_picture_description: bool = Field(
+        default=False,
+        description="Enable AI-powered image description generation (requires VLM)"
+    )
     
     class Config:
         json_schema_extra = {
@@ -63,7 +80,11 @@ class PipelineOptions(BaseModel):
                 "do_table_structure": True,
                 "do_cell_matching": True,
                 "num_threads": 16,
-                "accelerator_device": "cpu"
+                "accelerator_device": "cpu",
+                "do_code_enrichment": False,
+                "do_formula_enrichment": False,
+                "do_picture_classification": False,
+                "do_picture_description": False
             }
         }
 

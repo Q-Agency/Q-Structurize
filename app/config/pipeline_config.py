@@ -60,6 +60,36 @@ PIPELINE_OPTIONS_CONFIG = {
             "valid_values": ["cpu", "cuda", "auto"],
             "description": "Accelerator device selection",
             "notes": "'cpu' for CPU-only, 'cuda' for GPU, 'auto' for automatic detection"
+        },
+        "do_code_enrichment": {
+            "type": "boolean",
+            "default": False,
+            "description": "Enable code block language detection and parsing",
+            "notes": "Detects programming languages in code blocks. Increases processing time.",
+            "use_cases": ["Technical documentation", "Programming tutorials", "Code repositories"]
+        },
+        "do_formula_enrichment": {
+            "type": "boolean",
+            "default": False,
+            "description": "Enable formula analysis and LaTeX extraction",
+            "notes": "Extracts mathematical formulas in LaTeX format. Useful for scientific papers. Increases processing time.",
+            "use_cases": ["Research papers", "Academic documents", "Mathematical textbooks"]
+        },
+        "do_picture_classification": {
+            "type": "boolean",
+            "default": False,
+            "description": "Enable image classification",
+            "notes": "Classifies images into types: charts, diagrams, logos, signatures, etc. Increases processing time.",
+            "use_cases": ["Business reports", "Presentations", "Mixed content documents"],
+            "categories": ["Charts", "Flow diagrams", "Logos", "Signatures", "Natural images"]
+        },
+        "do_picture_description": {
+            "type": "boolean",
+            "default": False,
+            "description": "Enable AI-powered image description generation",
+            "notes": "⚠️ Requires Vision-Language Model (VLM). Significantly increases processing time and resource usage.",
+            "use_cases": ["Accessibility", "Content understanding", "Visual analysis"],
+            "requirements": "VLM model must be configured"
         }
     },
     "example_configurations": {
@@ -106,6 +136,34 @@ PIPELINE_OPTIONS_CONFIG = {
                 "table_mode": "accurate",
                 "do_cell_matching": True,
                 "num_threads": 32
+            }
+        },
+        "scientific_paper": {
+            "description": "For research papers with formulas and code",
+            "config": {
+                "enable_ocr": False,
+                "table_mode": "accurate",
+                "do_formula_enrichment": True,
+                "do_code_enrichment": True,
+                "do_picture_classification": True,
+                "num_threads": 24
+            }
+        },
+        "technical_documentation": {
+            "description": "For technical docs with code samples and diagrams",
+            "config": {
+                "do_code_enrichment": True,
+                "do_picture_classification": True,
+                "table_mode": "accurate",
+                "num_threads": 16
+            }
+        },
+        "business_report": {
+            "description": "For business reports with charts and tables",
+            "config": {
+                "table_mode": "accurate",
+                "do_picture_classification": True,
+                "num_threads": 16
             }
         }
     },

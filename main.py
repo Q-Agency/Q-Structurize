@@ -67,7 +67,12 @@ async def parse_pdf_file(
     do_table_structure: bool = Form(True, description="Enable table structure extraction"),
     do_cell_matching: bool = Form(True, description="Enable cell matching for better table accuracy"),
     num_threads: int = Form(8, ge=1, le=144, description="Number of processing threads (1-144, optimized for 72-core Xeon)"),
-    accelerator_device: AcceleratorDevice = Form(AcceleratorDevice.CPU, description="Accelerator device: 'cpu', 'cuda', or 'auto'")
+    accelerator_device: AcceleratorDevice = Form(AcceleratorDevice.CPU, description="Accelerator device: 'cpu', 'cuda', or 'auto'"),
+    # Enrichment options (advanced features, increase processing time)
+    do_code_enrichment: bool = Form(False, description="Enable code block language detection and parsing"),
+    do_formula_enrichment: bool = Form(False, description="Enable formula analysis and LaTeX extraction"),
+    do_picture_classification: bool = Form(False, description="Enable image classification (charts, diagrams, logos, etc.)"),
+    do_picture_description: bool = Form(False, description="Enable AI-powered image description (requires VLM, significantly increases processing time)")
 ):
     """
     Parse PDF file using Docling's StandardPdfPipeline with configurable options.
@@ -147,7 +152,12 @@ async def parse_pdf_file(
             "do_table_structure": do_table_structure,
             "do_cell_matching": do_cell_matching,
             "num_threads": num_threads,
-            "accelerator_device": accelerator_device.value  # Convert enum to string
+            "accelerator_device": accelerator_device.value,  # Convert enum to string
+            # Enrichment options
+            "do_code_enrichment": do_code_enrichment,
+            "do_formula_enrichment": do_formula_enrichment,
+            "do_picture_classification": do_picture_classification,
+            "do_picture_description": do_picture_description
         }
         
         # Validate using Pydantic model

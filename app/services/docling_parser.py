@@ -83,7 +83,12 @@ class DoclingParser:
             "do_table_structure": True,
             "do_cell_matching": True,
             "num_threads": 8,
-            "accelerator_device": "cpu"
+            "accelerator_device": "cpu",
+            # Enrichment options
+            "do_code_enrichment": False,
+            "do_formula_enrichment": False,
+            "do_picture_classification": False,
+            "do_picture_description": False
         }
         
         # Merge with user options
@@ -118,6 +123,18 @@ class DoclingParser:
             num_threads=options["num_threads"],
             device=device
         )
+        
+        # Enrichment options (advanced features)
+        pipeline_options.do_code_enrichment = options["do_code_enrichment"]
+        pipeline_options.do_formula_enrichment = options["do_formula_enrichment"]
+        pipeline_options.do_picture_classification = options["do_picture_classification"]
+        
+        # Note: do_picture_description might require additional VLM setup
+        # Only enable if explicitly requested and VLM is available
+        if options["do_picture_description"]:
+            # This feature requires Vision-Language Model (VLM) support
+            # May need additional configuration or models
+            pipeline_options.do_picture_description = True
         
         return pipeline_options
     
