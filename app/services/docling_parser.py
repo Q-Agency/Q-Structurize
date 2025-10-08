@@ -22,11 +22,11 @@ from typing import Optional, Dict, Any
 try:
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import DocumentConverter, PdfFormatOption
-    from docling.pipeline.standard_pdf_pipeline import ThreadedPdfPipeline
+    from docling.pipeline.threaded_pdf_pipeline import ThreadedPdfPipeline
     from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
     from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
     DOCLING_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     DOCLING_AVAILABLE = False
     InputFormat = None
     DocumentConverter = None
@@ -35,6 +35,8 @@ except ImportError:
     PdfPipelineOptions = None
     AcceleratorOptions = None
     AcceleratorDevice = None
+    import logging
+    logging.error(f"Failed to import docling: {e}")
 
 logger = logging.getLogger(__name__)
 
