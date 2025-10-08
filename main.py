@@ -1,9 +1,12 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from typing import Dict, Any
+from typing import Optional
 from pydantic import BaseModel
 import logging
+import json
 from app.services.pdf_optimizer import PDFOptimizer
 from app.services.docling_parser import DoclingParser
+from app.models.schemas import PipelineOptions
+from app.config import PIPELINE_OPTIONS_CONFIG, get_custom_openapi
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,8 +26,8 @@ class ParseResponse(BaseModel):
 
 app = FastAPI(
     title="Q-Structurize",
-    description="Advanced PDF parsing and structured text extraction API using Docling StandardPdfPipeline with layout analysis, OCR, and table extraction",
-    version="2.0.0",
+    description="Advanced PDF parsing and structured text extraction API using Docling StandardPdfPipeline with configurable per-request pipeline options. Features include layout analysis, optional OCR with multi-language support, configurable table extraction, and multi-threaded processing optimized for 72-core Xeon 6960P.",
+    version="2.1.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -33,35 +36,108 @@ app = FastAPI(
 @app.post("/parse/file", 
           response_model=ParseResponse,
           summary="Parse PDF with Docling StandardPipeline",
-          description="Upload a PDF file and get structured text output using Docling's StandardPdfPipeline with layout analysis, OCR, and table extraction",
-          tags=["PDF Parsing"])
+          description="Upload a PDF file and get structured text output using Docling's StandardPdfPipeline with configurable options",
+          tags=["PDF Parsing"],
+          responses={
+              200: {
+                  "description": "PDF successfully parsed",
+                  "content": {
+                      "application/json": {
+                          "example": {
+                              "message": "PDF parsed successfully using Docling StandardPdfPipeline",
+                              "status": "success",
+                              "content": "# Document Title\n\n## Section 1\n\nParagraph content...\n\n| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |"
+                          }
+                      }
+                  }
+              },
+              400: {"description": "Invalid request parameters"},
+              415: {"description": "Invalid file type (must be PDF)"},
+              500: {"description": "Server error during processing"},
+              503: {"description": "Parser service unavailable"}
+          })
 async def parse_pdf_file(
     file: UploadFile = File(..., description="PDF file to parse", media_type="application/pdf"),
     max_tokens_per_chunk: int = Form(512, description="Maximum tokens per chunk (reserved for future use)"),
-    optimize_pdf: bool = Form(True, description="Whether to optimize PDF for better text extraction")
+    optimize_pdf: bool = Form(True, description="Whether to optimize PDF for better text extraction"),
+    pipeline_options: Optional[str] = Form(
+        None, 
+        description='Pipeline options as JSON string. See GET /parsers/options for all available options.',
+        openapi_examples={
+            "default": {
+                "summary": "Default (Fast, No OCR)",
+                "description": "Use default settings - fastest processing",
+                "value": None
+            },
+            "with_ocr": {
+                "summary": "Enable OCR",
+                "description": "For scanned documents",
+                "value": '{"enable_ocr": true, "ocr_languages": ["en"], "num_threads": 16}'
+            },
+            "accurate_tables": {
+                "summary": "Accurate Tables",
+                "description": "For complex table structures",
+                "value": '{"table_mode": "accurate", "do_cell_matching": true, "num_threads": 24}'
+            },
+            "high_performance": {
+                "summary": "High Performance",
+                "description": "Maximum speed on 72-core Xeon",
+                "value": '{"num_threads": 64, "table_mode": "fast"}'
+            },
+            "multilingual": {
+                "summary": "Multilingual OCR",
+                "description": "For documents with multiple languages",
+                "value": '{"enable_ocr": true, "ocr_languages": ["en", "es", "de"], "num_threads": 16}'
+            },
+            "complete": {
+                "summary": "Complete Extraction",
+                "description": "OCR + Accurate tables + Multi-threading",
+                "value": '{"enable_ocr": true, "ocr_languages": ["en"], "table_mode": "accurate", "do_cell_matching": true, "num_threads": 32}'
+            }
+        }
+    )
 ):
     """
-    Parse PDF file using Docling's StandardPdfPipeline.
+    Parse PDF file using Docling's StandardPdfPipeline with configurable options.
     
     This endpoint processes PDF files using Docling's robust standard pipeline which includes:
     - **Layout Detection**: Document structure analysis using DocLayNet model
     - **Text Extraction**: High-quality text extraction from PDF layers
-    - **OCR Processing**: Text extraction from images and scanned documents using EasyOCR
+    - **OCR Processing**: Optional text extraction from images and scanned documents using EasyOCR
     - **Table Extraction**: Accurate table structure preservation using TableFormer
     - **Structured Output**: Clean markdown with proper formatting
     
     **Features:**
     - 📐 **Layout Analysis**: Understands document structure (headings, paragraphs, lists)
-    - 📊 **Table Extraction**: Preserves table structure and formatting
-    - 🔍 **OCR Support**: Handles scanned documents and images
+    - 📊 **Table Extraction**: Configurable FAST or ACCURATE modes
+    - 🔍 **OCR Support**: Optional with multi-language support
     - 📄 **PDF Optimization**: Pre-processing for better results  
     - 🔄 **Structured Output**: Clean markdown format
-    - ⚡ **CPU-Optimized**: Fast processing without GPU
+    - ⚡ **Multi-threading**: Optimized for 72-core Xeon 6960P
+    - ⚙️ **Per-request Configuration**: Customize pipeline per document
     
     **Parameters:**
     - **file**: PDF file to parse (required)
     - **max_tokens_per_chunk**: Maximum tokens per chunk (reserved for future use)
     - **optimize_pdf**: Whether to optimize PDF for better text extraction (default: true)
+    - **pipeline_options**: JSON string with pipeline configuration (optional):
+      - `enable_ocr`: Enable OCR (default: false)
+      - `ocr_languages`: Language codes, e.g., ["en", "es"] (default: ["en"])
+      - `table_mode`: "fast" or "accurate" (default: "fast")
+      - `do_table_structure`: Enable table extraction (default: true)
+      - `do_cell_matching`: Enable cell matching (default: true)
+      - `num_threads`: Number of threads 1-144 (default: 8)
+      - `accelerator_device`: "cpu", "cuda", or "auto" (default: "cpu")
+    
+    **Example pipeline_options:**
+    ```json
+    {
+        "enable_ocr": true,
+        "ocr_languages": ["en"],
+        "table_mode": "accurate",
+        "num_threads": 16
+    }
+    ```
     
     **Returns:**
     - Structured markdown content
@@ -72,6 +148,32 @@ async def parse_pdf_file(
     # Validate file type
     if not file.content_type or not file.content_type.startswith('application/pdf'):
         raise HTTPException(status_code=415, detail="File must be a PDF")
+    
+    try:
+        # ========================================
+        # PARSE PIPELINE OPTIONS (if provided)
+        # ========================================
+        parsed_options = None
+        if pipeline_options:
+            try:
+                options_dict = json.loads(pipeline_options)
+                # Validate using Pydantic model
+                validated_options = PipelineOptions(**options_dict)
+                # Convert to dict for passing to parser
+                parsed_options = validated_options.model_dump()
+                logger.info(f"Using custom pipeline options: {parsed_options}")
+            except json.JSONDecodeError as e:
+                raise HTTPException(status_code=400, detail=f"Invalid JSON in pipeline_options: {str(e)}")
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid pipeline_options: {str(e)}")
+        else:
+            logger.info("Using default pipeline options")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error parsing pipeline options: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Error parsing pipeline options: {str(e)}")
     
     try:
         # ========================================
@@ -103,7 +205,7 @@ async def parse_pdf_file(
             )
         
         logger.info("Starting PDF parsing with Docling StandardPdfPipeline...")
-        parse_result = docling_parser.parse_pdf(pdf_content)
+        parse_result = docling_parser.parse_pdf(pdf_content, options=parsed_options)
         
         if not parse_result["success"]:
             raise HTTPException(
@@ -137,13 +239,20 @@ async def root():
         "features": [
             "PDF optimization",
             "Docling StandardPdfPipeline",
+            "Configurable pipeline options per request",
             "Layout analysis",
-            "OCR processing",
-            "Table extraction"
+            "Optional OCR with multi-language support",
+            "Configurable table extraction (fast/accurate)",
+            "Multi-threaded processing (optimized for 72-core Xeon 6960P)"
         ],
-        "version": "2.0.0",
-        "docs": "/docs",
-        "redoc": "/redoc"
+        "version": "2.1.0",
+        "endpoints": {
+            "parse": "/parse/file - Parse PDF with configurable options",
+            "parser_info": "/parsers/info - Get parser capabilities",
+            "pipeline_options": "/parsers/options - Get available configuration options",
+            "docs": "/docs - Swagger UI documentation",
+            "redoc": "/redoc - ReDoc documentation"
+        }
     }
 
 
@@ -160,9 +269,34 @@ async def get_parser_info():
     - Models used (layout detection, OCR, table extraction)
     - Supported features
     - Performance characteristics
-    - Cache information
+    - Configuration options
     """
     return docling_parser.get_parser_info()
+
+
+@app.get("/parsers/options",
+         summary="Get Available Pipeline Options",
+         description="Get all available pipeline configuration options with defaults and descriptions",
+         tags=["System"])
+async def get_pipeline_options():
+    """
+    Get available pipeline configuration options.
+    
+    Returns a complete list of all configurable pipeline options including:
+    - Option names and types
+    - Default values
+    - Valid ranges/values
+    - Descriptions
+    - Usage examples
+    
+    Use this endpoint to understand what options can be passed to the /parse/file endpoint
+    via the pipeline_options parameter.
+    """
+    return PIPELINE_OPTIONS_CONFIG
+
+
+# Configure custom OpenAPI schema for enhanced Swagger UI documentation
+app.openapi = lambda: get_custom_openapi(app)
 
 
 if __name__ == "__main__":

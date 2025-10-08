@@ -5,11 +5,12 @@ Advanced PDF parsing and structured text extraction API using Docling's Standard
 ## Features
 
 - **📐 Layout Analysis**: Document structure understanding using DocLayNet model
-- **📊 Table Extraction**: Accurate table structure preservation using TableFormer
-- **🔍 OCR Support**: Text extraction from images and scanned documents using EasyOCR
+- **📊 Table Extraction**: Configurable FAST or ACCURATE table structure preservation using TableFormer
+- **🔍 OCR Support**: Optional multi-language text extraction from images and scanned documents using EasyOCR
 - **📄 PDF Optimization**: Clean and optimize PDFs for better text extraction using pikepdf
 - **🔄 Structured Output**: Clean markdown format with proper formatting
-- **⚡ CPU-Optimized**: Fast processing without GPU requirements
+- **⚡ Multi-threaded**: Optimized for high-performance CPUs (72-core Xeon 6960P)
+- **⚙️ Configurable Pipeline**: Per-request configuration of OCR, table extraction, threading, and more
 - **🐳 Docker Support**: Ready for containerized deployment
 - **📚 FastAPI**: Modern, fast web framework with automatic API documentation
 
@@ -61,12 +62,20 @@ Docling's **StandardPdfPipeline** is a CPU-optimized PDF processing pipeline tha
 
 ### POST /parse/file
 
-Parse PDF files using Docling's StandardPdfPipeline.
+Parse PDF files using Docling's StandardPdfPipeline with configurable options.
 
 **Parameters:**
 - `file` (required): PDF file upload
 - `max_tokens_per_chunk` (optional, int): Maximum tokens per chunk (reserved for future use, default: 512)
 - `optimize_pdf` (optional, boolean): Whether to optimize PDF for better text extraction (default: true)
+- `pipeline_options` (optional, JSON string): Pipeline configuration options
+  - `enable_ocr` (boolean): Enable OCR for scanned documents (default: false)
+  - `ocr_languages` (array): Language codes like ["en", "es"] (default: ["en"])
+  - `table_mode` (string): "fast" or "accurate" (default: "fast")
+  - `do_table_structure` (boolean): Enable table extraction (default: true)
+  - `do_cell_matching` (boolean): Enable cell matching (default: true)
+  - `num_threads` (integer): Processing threads 1-144 (default: 8)
+  - `accelerator_device` (string): "cpu", "cuda", or "auto" (default: "cpu")
 
 **Response Format:**
 ```json
@@ -77,12 +86,21 @@ Parse PDF files using Docling's StandardPdfPipeline.
 }
 ```
 
+### GET /parsers/options
+
+Get available pipeline configuration options with:
+- Option descriptions and types
+- Default values and valid ranges
+- Example configurations for common scenarios
+- Usage examples (curl and Python)
+
 ### GET /parsers/info
 
 Get detailed information about the StandardPdfPipeline parser:
 - Models used (layout detection, table extraction, OCR)
 - Features and capabilities
 - Performance characteristics
+- Configuration options
 - Limitations
 
 ### GET /
@@ -164,21 +182,65 @@ docker logs q-structurize 2>&1 | grep "Models downloaded"
 
 ## Usage Examples
 
-### Basic PDF Parsing
+### Basic PDF Parsing (Default Settings)
 ```bash
 curl -X POST "http://localhost:8878/parse/file" \
   -F "file=@document.pdf" \
   -F "optimize_pdf=true"
 ```
 
-### Python Example
+### Parse Scanned PDF with OCR
+```bash
+curl -X POST "http://localhost:8878/parse/file" \
+  -F "file=@scanned.pdf" \
+  -F 'pipeline_options={"enable_ocr": true, "ocr_languages": ["en"]}'
+```
+
+### High-Performance Processing (Leverage 72-core Xeon)
+```bash
+curl -X POST "http://localhost:8878/parse/file" \
+  -F "file=@document.pdf" \
+  -F 'pipeline_options={"num_threads": 64, "table_mode": "fast"}'
+```
+
+### Accurate Table Extraction
+```bash
+curl -X POST "http://localhost:8878/parse/file" \
+  -F "file=@tables.pdf" \
+  -F 'pipeline_options={"table_mode": "accurate", "do_cell_matching": true, "num_threads": 24}'
+```
+
+### Multilingual Document with OCR
+```bash
+curl -X POST "http://localhost:8878/parse/file" \
+  -F "file=@multilingual.pdf" \
+  -F 'pipeline_options={"enable_ocr": true, "ocr_languages": ["en", "es", "de"], "num_threads": 16}'
+```
+
+### Get Available Configuration Options
+```bash
+curl -X GET "http://localhost:8878/parsers/options"
+```
+
+### Python Example with Pipeline Options
 ```python
 import requests
+import json
 
 url = "http://localhost:8878/parse/file"
 files = {"file": open("document.pdf", "rb")}
+
+# Configure pipeline options
+pipeline_config = {
+    "enable_ocr": True,
+    "ocr_languages": ["en"],
+    "table_mode": "accurate",
+    "num_threads": 16
+}
+
 data = {
-    "optimize_pdf": True
+    "optimize_pdf": True,
+    "pipeline_options": json.dumps(pipeline_config)
 }
 
 response = requests.post(url, files=files, data=data)
@@ -188,11 +250,20 @@ print(f"Status: {result['status']}")
 print(f"Content:\n{result['content']}")
 ```
 
-### JavaScript Example
+### JavaScript Example with Pipeline Options
 ```javascript
 const formData = new FormData();
 formData.append('file', pdfFile);
 formData.append('optimize_pdf', 'true');
+
+// Configure pipeline options
+const pipelineOptions = {
+  enable_ocr: true,
+  ocr_languages: ["en"],
+  num_threads: 16,
+  table_mode: "accurate"
+};
+formData.append('pipeline_options', JSON.stringify(pipelineOptions));
 
 const response = await fetch('http://localhost:8878/parse/file', {
   method: 'POST',
@@ -201,6 +272,85 @@ const response = await fetch('http://localhost:8878/parse/file', {
 
 const result = await response.json();
 console.log(result.content);
+```
+
+## Pipeline Configuration Guide
+
+### When to Use OCR
+- ✅ **Enable OCR** for: Scanned documents, images embedded in PDFs, handwritten notes
+- ❌ **Disable OCR** for: Native digital PDFs with selectable text (faster processing)
+
+### Table Extraction Modes
+- **Fast Mode** (default): Good for most documents, faster processing
+- **Accurate Mode**: Better for complex tables with merged cells, nested structures
+
+### Thread Configuration for 72-core Xeon 6960P
+
+| Scenario | Threads | Use Case |
+|----------|---------|----------|
+| **Light Load** | 8-16 | Multiple concurrent requests, balanced CPU usage |
+| **Balanced** | 16-32 | Good balance between speed and resource availability |
+| **High Performance** | 32-64 | Single high-priority document, maximum speed |
+| **Maximum** | 64-144 | Dedicated processing, all resources available |
+
+### Language Support for OCR
+Common language codes:
+- `en` - English
+- `es` - Spanish
+- `de` - German
+- `fr` - French
+- `it` - Italian
+- `pt` - Portuguese
+- `ru` - Russian
+- `zh` - Chinese
+- `ja` - Japanese
+- `ko` - Korean
+
+Example: `"ocr_languages": ["en", "es"]` for English and Spanish
+
+### Pre-configured Scenarios
+
+**Scenario 1: Fast Processing (Default)**
+```json
+{}
+```
+No OCR, fast table mode, 8 threads
+
+**Scenario 2: Scanned Documents**
+```json
+{
+  "enable_ocr": true,
+  "ocr_languages": ["en"],
+  "num_threads": 16
+}
+```
+
+**Scenario 3: Complex Financial Documents**
+```json
+{
+  "table_mode": "accurate",
+  "do_cell_matching": true,
+  "num_threads": 24
+}
+```
+
+**Scenario 4: High-Volume Processing**
+```json
+{
+  "num_threads": 64,
+  "table_mode": "fast"
+}
+```
+
+**Scenario 5: Maximum Quality**
+```json
+{
+  "enable_ocr": true,
+  "ocr_languages": ["en"],
+  "table_mode": "accurate",
+  "do_cell_matching": true,
+  "num_threads": 32
+}
 ```
 
 ## Architecture
@@ -214,8 +364,9 @@ console.log(result.content);
 
 2. **Docling Parser** (`app/services/docling_parser.py`)
    - StandardPdfPipeline integration
-   - Model loading and caching
-   - Document processing
+   - Per-request pipeline configuration
+   - Dynamic model loading and caching
+   - Document processing with configurable options
 
 3. **PDF Optimizer** (`app/services/pdf_optimizer.py`)
    - PDF preprocessing with pikepdf
