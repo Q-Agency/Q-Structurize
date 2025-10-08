@@ -25,8 +25,11 @@ services:
     # Compose (non-Swarm) resource hints
     # Use these only if you really need to constrain:
     # mem_limit works with compose; cpus is supported by recent compose versions.
-    mem_limit: 256g
-    cpus: 100
+    # Note: Adjust these for your deployment environment
+    # - Local Mac: cpus: 8 (or less)
+    # - Production Ubuntu with 2x Xeon 6960P: cpus: 144, mem_limit: 256g
+    mem_limit: 16g
+    cpus: 7
 
     # Healthcheck: point to a real 200 endpoint (e.g., /healthz)
     healthcheck:
