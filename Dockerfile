@@ -37,11 +37,11 @@ RUN ls -lah /root/.cache/docling/models || true
 # Runtime environment variables (change these without invalidating cache layers above)
 ENV LOG_LEVEL=DEBUG \
     TOKENIZERS_PARALLELISM=false \
-    OMP_NUM_THREADS=32 \
-    MKL_NUM_THREADS=32 \
-    OPENBLAS_NUM_THREADS=32 \
-    NUMEXPR_NUM_THREADS=32 \
-    TORCH_NUM_THREADS=32 \
+    OMP_NUM_THREADS=120 \
+    MKL_NUM_THREADS=120 \
+    OPENBLAS_NUM_THREADS=120 \
+    NUMEXPR_NUM_THREADS=120 \
+    TORCH_NUM_THREADS=120 \
     KMP_BLOCKTIME=1 \
     KMP_SETTINGS=1 \
     KMP_AFFINITY="granularity=fine,compact,1,0" \
