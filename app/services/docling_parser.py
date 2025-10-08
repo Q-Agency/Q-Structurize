@@ -203,13 +203,7 @@ class DoclingParser:
             device=device
         )
 
-        logger.info(
-            "Docling accelerator: device=%s, threads=%s | layout_batch=%s, table_batch=%s",
-            pipeline_options.accelerator_options.device,
-            pipeline_options.accelerator_options.num_threads,
-            pipeline_options.layout_batch_size,
-            pipeline_options.table_batch_size,
-        )
+
         
         # Enrichment options
         pipeline_options.do_code_enrichment = user_options.get("do_code_enrichment", False)
@@ -224,6 +218,14 @@ class DoclingParser:
         pipeline_options.queue_max_size = user_options.get("queue_max_size", 1000)
         pipeline_options.batch_timeout_seconds = user_options.get("batch_timeout_seconds", 0.5)
         
+        logger.info(
+            "Docling accelerator: device=%s, threads=%s | layout_batch=%s, table_batch=%s",
+            pipeline_options.accelerator_options.device,
+            pipeline_options.accelerator_options.num_threads,
+            pipeline_options.layout_batch_size,
+            pipeline_options.table_batch_size,
+        )
+
         return pipeline_options
     
     def parse_pdf(self, pdf_content: bytes) -> Dict[str, Any]:
