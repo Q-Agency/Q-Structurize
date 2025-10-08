@@ -23,7 +23,7 @@ try:
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.pipeline.standard_pdf_pipeline import ThreadedPdfPipeline
-    from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions, TableFormerMode
+    from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
     from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
     DOCLING_AVAILABLE = True
 except ImportError:
@@ -32,6 +32,7 @@ except ImportError:
     DocumentConverter = None
     PdfFormatOption = None
     ThreadedPdfPipeline = None
+    PdfPipelineOptions = None
     AcceleratorOptions = None
     AcceleratorDevice = None
 
@@ -46,7 +47,7 @@ class DoclingParser:
         self.mode = "threaded-pipeline"
         # No longer initialize converter at startup - will be created per request
     
-    def _create_pipeline_options(self, user_options: Optional[Dict[str, Any]] = None) -> ThreadedPdfPipelineOptions:
+    def _create_pipeline_options(self, user_options: Optional[Dict[str, Any]] = None) -> PdfPipelineOptions:
 
         # Default options
         defaults = {
@@ -73,8 +74,8 @@ class DoclingParser:
         # Merge with user options
         options = {**defaults, **(user_options or {})}
         
-        # Create ThreadedPdfPipeline options
-        pipeline_options = ThreadedPdfPipelineOptions()
+        # Create PdfPipelineOptions (works with ThreadedPdfPipeline)
+        pipeline_options = PdfPipelineOptions()
         
         # OCR configuration
         pipeline_options.do_ocr = options["enable_ocr"]
@@ -124,7 +125,7 @@ class DoclingParser:
         
         return pipeline_options
     
-    def _create_converter(self, pipeline_options: ThreadedPdfPipelineOptions) -> DocumentConverter:
+    def _create_converter(self, pipeline_options: PdfPipelineOptions) -> DocumentConverter:
 
         if not DOCLING_AVAILABLE:
             raise RuntimeError("Docling is not available")
