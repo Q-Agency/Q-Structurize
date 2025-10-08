@@ -1,38 +1,47 @@
-version: '3.8'
+version: "3.8"
 
 services:
   q-structurize:
     build:
       context: .
       dockerfile: Dockerfile
+    image: q-structurize:cpu
     container_name: q-structurize
     ports:
       - "8878:8000"
+
+    # Persist data and caches to avoid re-downloading models
     volumes:
-      # Persist uploads
       - ./uploads:/app/uploads
-      # Note: Models are built into the image during 'docker build'
-      # No need to mount cache volumes as models persist in image layers
+      - docling_models:/root/.cache/docling/models
+      - hf_cache:/app/.cache/huggingface
+
     environment:
-      # Python settings
       - PYTHONPATH=/app
-      # Note: Other environment variables (DOCLING_ARTIFACTS_PATH, HF_HOME, etc.) 
-      # are already set in the Dockerfile and don't need to be repeated here
-      
-    # Restart policy
+      # (Other envs are set in Dockerfile)
+
     restart: unless-stopped
-    
-    # Resource limits (optional, adjust as needed)
-    deploy:
-      resources:
-        limits:
-          memory: 20G
-          cpus: '40'
-    
-    # Health check
+
+    # Compose (non-Swarm) resource hints
+    # Use these only if you really need to constrain:
+    # mem_limit works with compose; cpus is supported by recent compose versions.
+    mem_limit: 256g
+    cpus: 100
+
+    # Healthcheck: point to a real 200 endpoint (e.g., /healthz)
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+volumes:
+  docling_models:
+  hf_cache:

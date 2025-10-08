@@ -121,8 +121,12 @@ class DoclingParser:
         logger.info(f"      - Queue Max: {pipeline_options.queue_max_size}")
         logger.info(f"      - Batch Timeout: {pipeline_options.batch_timeout_seconds}s")
         logger.info(f"   📝 Features:")
-        logger.info(f"      - OCR: {'✅ Enabled' if pipeline_options.do_ocr else '❌ Disabled'} {f'({self.default_config[\"ocr_languages\"]})' if pipeline_options.do_ocr else ''}")
-        logger.info(f"      - Tables: {'✅ Enabled' if pipeline_options.do_table_structure else '❌ Disabled'} {f'({self.default_config[\"table_mode\"]})' if pipeline_options.do_table_structure else ''}")
+        ocr_status = '✅ Enabled' if pipeline_options.do_ocr else '❌ Disabled'
+        ocr_langs = f"({self.default_config['ocr_languages']})" if pipeline_options.do_ocr else ''
+        logger.info(f"      - OCR: {ocr_status} {ocr_langs}")
+        table_status = '✅ Enabled' if pipeline_options.do_table_structure else '❌ Disabled'
+        table_mode = f"({self.default_config['table_mode']})" if pipeline_options.do_table_structure else ''
+        logger.info(f"      - Tables: {table_status} {table_mode}")
         logger.info(f"      - Code Enrichment: {'✅' if pipeline_options.do_code_enrichment else '❌'}")
         logger.info(f"      - Formula Enrichment: {'✅' if pipeline_options.do_formula_enrichment else '❌'}")
         logger.info(f"      - Picture Classification: {'✅' if pipeline_options.do_picture_classification else '❌'}")
