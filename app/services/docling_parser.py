@@ -15,6 +15,8 @@ import logging
 import time
 from typing import Optional, Dict, Any
 
+from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
+
 # Configure PyTorch threading (must be done before importing docling)
 # PyTorch doesn't always respect TORCH_NUM_THREADS env var, so we set it explicitly
 try:
@@ -138,6 +140,7 @@ class DoclingParser:
                 InputFormat.PDF: PdfFormatOption(
                     pipeline_cls=StandardPdfPipeline,
                     pipeline_options=pipeline_options,
+                    document_backend=PyPdfiumDocumentBackend,
                 ),
             }
         )
