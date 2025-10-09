@@ -125,8 +125,89 @@ class PipelineOptions(BaseModel):
         }
 
 
+class ChunkMetadata(BaseModel):
+    """Metadata for a document chunk."""
+    content_type: str = Field(
+        description="Type of content in the chunk: 'text', 'table', 'list', or 'heading'"
+    )
+    heading_path: Optional[str] = Field(
+        default=None,
+        description="Hierarchical path of headings (e.g., 'Chapter 1 > Section 1.1')"
+    )
+    pages: Optional[List[int]] = Field(
+        default=None,
+        description="List of page numbers where this chunk appears"
+    )
+    captions: Optional[List[str]] = Field(
+        default=None,
+        description="Captions for tables or figures in this chunk"
+    )
+    has_table_structure: Optional[bool] = Field(
+        default=None,
+        description="Whether this chunk contains table structure"
+    )
+    doc_items_count: Optional[int] = Field(
+        default=None,
+        description="Number of document items in this chunk"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "content_type": "text",
+                "heading_path": "Chapter 1 > Introduction",
+                "pages": [1, 2],
+                "captions": ["Figure 1: Overview diagram"],
+                "doc_items_count": 5
+            }
+        }
+
+
+class ChunkData(BaseModel):
+    """A single document chunk with text and metadata."""
+    text: str = Field(
+        description="The chunk text with search prefix and contextualization"
+    )
+    section_title: Optional[str] = Field(
+        default=None,
+        description="The section title (most specific heading) for this chunk"
+    )
+    chunk_index: int = Field(
+        description="Index of this chunk in the document (0-based)"
+    )
+    metadata: ChunkMetadata = Field(
+        description="Rich metadata about the chunk content and location"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text": "search_document: Introduction\n\nThis document presents...",
+                "section_title": "Introduction",
+                "chunk_index": 0,
+                "metadata": {
+                    "content_type": "text",
+                    "heading_path": "Chapter 1 > Introduction",
+                    "pages": [1],
+                    "doc_items_count": 3
+                }
+            }
+        }
+
+
 class ParseResponse(BaseModel):
     """Response model for PDF parsing endpoint."""
     message: str
     status: str
-    content: Optional[str] = None
+    content: Optional[str] = Field(
+        default=None,
+        description="Parsed content in markdown format (only when chunking disabled)"
+    )
+    chunks: Optional[List[ChunkData]] = Field(
+        default=None,
+        description="List of document chunks (only when chunking enabled)"
+    )
+    total_chunks: Optional[int] = Field(
+        default=None,
+        description="Total number of chunks generated (only when chunking enabled)"
+    )

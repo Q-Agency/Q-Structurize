@@ -4,6 +4,8 @@ from pydantic import BaseModel
 import logging
 from app.services.pdf_optimizer import PDFOptimizer
 from app.services.docling_parser import DoclingParser
+from app.services import hybrid_chunker
+from app.models.schemas import ParseResponse, ChunkData, ChunkMetadata
 from app.config import PIPELINE_OPTIONS_CONFIG, get_custom_openapi
 
 # Configure logging
@@ -26,17 +28,10 @@ pdf_optimizer = PDFOptimizer()
 docling_parser = DoclingParser()
 
 
-class ParseResponse(BaseModel):
-    """Response model for PDF parsing endpoint."""
-    message: str
-    status: str
-    content: str | None = None  # The parsed content in markdown format
-
-
 app = FastAPI(
     title="Q-Structurize",
-    description="Advanced PDF parsing and structured text extraction API using Docling StandardPdfPipeline with ThreadedPdfPipelineOptions for batching and backpressure control. Features include layout analysis, optional OCR with multi-language support, configurable table extraction, batched processing, and multi-threaded processing optimized for 2x 72-core Xeon 6960P (144 cores).",
-    version="2.2.0",
+    description="Advanced PDF parsing and structured text extraction API using Docling StandardPdfPipeline with ThreadedPdfPipelineOptions for batching and backpressure control. Features include layout analysis, hybrid chunking for RAG, optional OCR with multi-language support, configurable table extraction, batched processing, and multi-threaded processing optimized for 2x 72-core Xeon 6960P (144 cores).",
+    version="2.3.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -67,46 +62,52 @@ app = FastAPI(
           })
 async def parse_pdf_file(
     file: UploadFile = File(..., description="PDF file to parse", media_type="application/pdf"),
-    optimize_pdf: bool = Form(True, description="Whether to optimize PDF for better text extraction")
+    optimize_pdf: bool = Form(True, description="Whether to optimize PDF for better text extraction"),
+    enable_chunking: bool = Form(False, description="Enable hybrid chunking for RAG and semantic search"),
+    max_tokens_per_chunk: int = Form(512, ge=128, le=2048, description="Maximum tokens per chunk (128-2048)"),
+    merge_peers: bool = Form(True, description="Merge undersized successive chunks with same headings"),
+    include_markdown: bool = Form(False, description="Include full markdown content when chunking is enabled")
 ):
     """
     Parse PDF file using pre-initialized Docling pipeline with optimized settings.
     
-    **Configuration is set at container startup via Dockerfile ENV variables.**
-    This approach provides:
+    **Features:**
     - 🚀 **Instant Processing**: Pre-loaded models, no initialization delay
     - ⚡ **Consistent Performance**: Same optimized settings for all requests  
     - 📐 **Layout Analysis**: Document structure (headings, paragraphs, lists)
     - 📄 **PDF Optimization**: Optional pre-processing for better extraction
-    - 🔄 **Clean Output**: Structured markdown format
+    - 🔄 **Clean Output**: Structured markdown or semantic chunks
+    - 🧩 **Hybrid Chunking**: Modern chunking with native merge_peers for RAG
     
     **Parameters:**
     - **file**: PDF file to parse (required)
     - **optimize_pdf**: Pre-process PDF for better text extraction (default: true)
-    
-    **Configuration (Dockerfile ENV):**
-    To change processing settings, update these ENV variables in Dockerfile and rebuild (takes ~10 seconds):
-    - `OMP_NUM_THREADS`: Number of processing threads (default: 100, max: 144)
-    - OCR, table extraction, and batching settings in parser initialization
+    - **enable_chunking**: Enable hybrid chunking for RAG/semantic search (default: false)
+    - **max_tokens_per_chunk**: Maximum tokens per chunk, 128-2048 (default: 512)
+    - **merge_peers**: Auto-merge undersized chunks with same headings (default: true)
+    - **include_markdown**: Include full markdown when chunking (default: false)
     
     **Example Usage:**
     ```bash
-    # Simple parsing
+    # Simple parsing (markdown output)
     curl -X POST "http://localhost:8878/parse/file" -F "file=@document.pdf"
     
-    # Without PDF optimization (faster but may miss some text)
+    # Hybrid chunking for RAG
     curl -X POST "http://localhost:8878/parse/file" \\
       -F "file=@document.pdf" \\
-      -F "optimize_pdf=false"
+      -F "enable_chunking=true" \\
+      -F "max_tokens_per_chunk=1024"
+    
+    # Chunking with markdown included
+    curl -X POST "http://localhost:8878/parse/file" \\
+      -F "file=@document.pdf" \\
+      -F "enable_chunking=true" \\
+      -F "include_markdown=true"
     ```
     
-    **To Change Configuration:**
-    1. Edit Dockerfile ENV variables or parser initialization
-    2. Rebuild: `docker-compose build` (~10 seconds with cache)
-    3. Restart: `docker-compose up`
-    
     **Returns:**
-    - Structured markdown content
+    - **Without chunking**: Structured markdown content
+    - **With chunking**: List of chunks with rich metadata (pages, headings, content type)
     - Processing status and metadata
     - Error information if parsing fails
     """
@@ -144,21 +145,64 @@ async def parse_pdf_file(
                 detail="Docling parser is not available. Please check dependencies."
             )
         
-        logger.info("Starting PDF parsing with pre-initialized Docling converter...")
-        parse_result = docling_parser.parse_pdf(pdf_content)
-        
-        if not parse_result["success"]:
-            raise HTTPException(
-                status_code=500, 
-                detail=f"PDF parsing failed: {parse_result['error']}"
+        # Branch: Chunking vs Standard Markdown
+        if enable_chunking:
+            logger.info(f"Starting PDF parsing with chunking (max_tokens={max_tokens_per_chunk}, merge_peers={merge_peers})...")
+            
+            # Parse to DoclingDocument object
+            document = docling_parser.parse_pdf_to_document(pdf_content)
+            
+            # Chunk the document using hybrid chunker
+            chunks = hybrid_chunker.chunk_document(
+                document=document,
+                max_tokens=max_tokens_per_chunk,
+                merge_peers=merge_peers,
+                tokenizer=None  # Use HybridChunker's built-in tokenizer
             )
-        
-        # Return successful parsing result
-        return ParseResponse(
-            message="PDF parsed successfully using pre-initialized converter",
-            status="success",
-            content=parse_result["content"]
-        )
+            
+            # Optionally include markdown
+            markdown_content = None
+            if include_markdown:
+                logger.info("Exporting full markdown content...")
+                markdown_content = document.export_to_markdown()
+            
+            # Convert chunk dicts to ChunkData models
+            chunk_models = [
+                ChunkData(
+                    text=chunk["text"],
+                    section_title=chunk["section_title"],
+                    chunk_index=chunk["chunk_index"],
+                    metadata=ChunkMetadata(**chunk["metadata"])
+                )
+                for chunk in chunks
+            ]
+            
+            logger.info(f"Successfully generated {len(chunk_models)} chunks")
+            
+            return ParseResponse(
+                message=f"PDF parsed and chunked successfully ({len(chunk_models)} chunks generated)",
+                status="success",
+                content=markdown_content,
+                chunks=chunk_models,
+                total_chunks=len(chunk_models)
+            )
+        else:
+            # Standard markdown parsing
+            logger.info("Starting PDF parsing with pre-initialized Docling converter...")
+            parse_result = docling_parser.parse_pdf(pdf_content)
+            
+            if not parse_result["success"]:
+                raise HTTPException(
+                    status_code=500, 
+                    detail=f"PDF parsing failed: {parse_result['error']}"
+                )
+            
+            # Return successful parsing result
+            return ParseResponse(
+                message="PDF parsed successfully using pre-initialized converter",
+                status="success",
+                content=parse_result["content"]
+            )
         
     except HTTPException:
         raise
@@ -180,12 +224,13 @@ async def root():
             "PDF optimization",
             "Pre-initialized Docling converter for instant processing",
             "Layout analysis and document structure extraction",
+            "Hybrid chunking with native merge_peers for RAG",
             "Batched processing with ThreadedPdfPipelineOptions",
             "ENV-based configuration (modify Dockerfile and rebuild)",
             "Multi-threaded processing (optimized for 2x 72-core Xeon 6960P)",
-            "Structured markdown output"
+            "Structured markdown or semantic chunks output"
         ],
-        "version": "2.2.0",
+        "version": "2.3.0",
         "endpoints": {
             "parse": "/parse/file - Parse PDF with configurable options",
             "parser_info": "/parsers/info - Get parser capabilities",

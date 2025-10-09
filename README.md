@@ -8,7 +8,8 @@ Advanced PDF parsing and structured text extraction API using Docling's Standard
 - **📊 Table Extraction**: Configurable FAST or ACCURATE table structure preservation using TableFormer
 - **🔍 OCR Support**: Optional multi-language text extraction from images and scanned documents using EasyOCR
 - **📄 PDF Optimization**: Clean and optimize PDFs for better text extraction using pikepdf
-- **🔄 Structured Output**: Clean markdown format with proper formatting
+- **🔄 Structured Output**: Clean markdown format or semantic chunks with rich metadata
+- **🧩 Hybrid Chunking**: Modern chunking with native merge_peers for RAG and semantic search
 - **⚡ Multi-threaded**: Optimized for high-performance CPUs (72-core Xeon 6960P)
 - **⚙️ Configurable Pipeline**: Per-request configuration of OCR, table extraction, threading, and more
 - **🐳 Docker Support**: Ready for containerized deployment
@@ -62,12 +63,15 @@ Docling's **StandardPdfPipeline** is a CPU-optimized PDF processing pipeline tha
 
 ### POST /parse/file
 
-Parse PDF files using Docling's StandardPdfPipeline with configurable options.
+Parse PDF files using Docling's StandardPdfPipeline with configurable options. Supports both markdown output and hybrid chunking for RAG applications.
 
 **Parameters:**
 - `file` (required): PDF file upload
-- `max_tokens_per_chunk` (optional, int): Maximum tokens per chunk (reserved for future use, default: 512)
 - `optimize_pdf` (optional, boolean): Whether to optimize PDF for better text extraction (default: true)
+- `enable_chunking` (optional, boolean): Enable hybrid chunking for RAG/semantic search (default: false)
+- `max_tokens_per_chunk` (optional, int): Maximum tokens per chunk, 128-2048 (default: 512)
+- `merge_peers` (optional, boolean): Auto-merge undersized chunks with same headings (default: true)
+- `include_markdown` (optional, boolean): Include full markdown when chunking enabled (default: false)
 - `pipeline_options` (optional, JSON string): Pipeline configuration options
   - `enable_ocr` (boolean): Enable OCR for scanned documents (default: false)
   - `ocr_languages` (array): Language codes like ["en", "es"] (default: ["en"])
@@ -77,12 +81,35 @@ Parse PDF files using Docling's StandardPdfPipeline with configurable options.
   - `num_threads` (integer): Processing threads 1-144 (default: 8)
   - `accelerator_device` (string): "cpu", "cuda", or "auto" (default: "cpu")
 
-**Response Format:**
+**Response Format (Standard Markdown):**
 ```json
 {
   "message": "PDF parsed successfully using Docling StandardPdfPipeline",
   "status": "success",
   "content": "# Document Title\n\nStructured markdown content..."
+}
+```
+
+**Response Format (Chunked):**
+```json
+{
+  "message": "PDF parsed and chunked successfully (42 chunks generated)",
+  "status": "success",
+  "chunks": [
+    {
+      "text": "search_document: Introduction\n\nThis document presents...",
+      "section_title": "Introduction",
+      "chunk_index": 0,
+      "metadata": {
+        "content_type": "text",
+        "heading_path": "Chapter 1 > Introduction",
+        "pages": [1, 2],
+        "doc_items_count": 5
+      }
+    }
+  ],
+  "total_chunks": 42,
+  "content": null
 }
 ```
 
@@ -196,6 +223,29 @@ curl -X POST "http://localhost:8878/parse/file" \
   -F 'pipeline_options={"enable_ocr": true, "ocr_languages": ["en"]}'
 ```
 
+### Hybrid Chunking for RAG (Basic)
+```bash
+curl -X POST "http://localhost:8878/parse/file" \
+  -F "file=@document.pdf" \
+  -F "enable_chunking=true"
+```
+
+### Hybrid Chunking with Custom Token Limit
+```bash
+curl -X POST "http://localhost:8878/parse/file" \
+  -F "file=@document.pdf" \
+  -F "enable_chunking=true" \
+  -F "max_tokens_per_chunk=1024"
+```
+
+### Chunking with Markdown Included
+```bash
+curl -X POST "http://localhost:8878/parse/file" \
+  -F "file=@document.pdf" \
+  -F "enable_chunking=true" \
+  -F "include_markdown=true"
+```
+
 ### High-Performance Processing (Leverage 72-core Xeon)
 ```bash
 curl -X POST "http://localhost:8878/parse/file" \
@@ -248,6 +298,36 @@ result = response.json()
 
 print(f"Status: {result['status']}")
 print(f"Content:\n{result['content']}")
+```
+
+### Python Example with Chunking for RAG
+```python
+import requests
+
+url = "http://localhost:8878/parse/file"
+files = {"file": open("document.pdf", "rb")}
+
+# Enable chunking for RAG
+data = {
+    "enable_chunking": True,
+    "max_tokens_per_chunk": 1024,
+    "merge_peers": True,
+    "include_markdown": False
+}
+
+response = requests.post(url, files=files, data=data)
+result = response.json()
+
+print(f"Status: {result['status']}")
+print(f"Total chunks: {result['total_chunks']}")
+
+# Process chunks for embedding/indexing
+for chunk in result['chunks']:
+    print(f"\nChunk {chunk['chunk_index']}:")
+    print(f"  Section: {chunk['section_title']}")
+    print(f"  Pages: {chunk['metadata']['pages']}")
+    print(f"  Content type: {chunk['metadata']['content_type']}")
+    print(f"  Text preview: {chunk['text'][:100]}...")
 ```
 
 ### JavaScript Example with Pipeline Options
@@ -307,6 +387,37 @@ Common language codes:
 - `ko` - Korean
 
 Example: `"ocr_languages": ["en", "es"]` for English and Spanish
+
+### Hybrid Chunking Configuration
+
+**When to Use Chunking:**
+- ✅ **RAG (Retrieval-Augmented Generation)**: Break documents into semantic chunks for embedding and retrieval
+- ✅ **Semantic Search**: Create searchable chunks with rich metadata (pages, headings, content type)
+- ✅ **Long Document Processing**: Split large documents into manageable pieces for LLM processing
+- ✅ **Context-Aware Indexing**: Maintain document structure and context in each chunk
+
+**Chunking Parameters:**
+
+| Parameter | Default | Range | Description |
+|-----------|---------|-------|-------------|
+| `enable_chunking` | false | boolean | Enable hybrid chunking mode |
+| `max_tokens_per_chunk` | 512 | 128-2048 | Maximum tokens per chunk |
+| `merge_peers` | true | boolean | Auto-merge undersized successive chunks with same headings |
+| `include_markdown` | false | boolean | Include full markdown alongside chunks |
+
+**Chunk Metadata:**
+Each chunk includes rich metadata:
+- `content_type`: text, table, list, or heading
+- `heading_path`: Hierarchical path (e.g., "Chapter 1 > Section 1.1")
+- `pages`: List of page numbers where chunk appears
+- `section_title`: Most specific heading for the chunk
+- `captions`: Captions for tables/figures in the chunk
+
+**Token Limit Guidelines:**
+- **128-256 tokens**: Very small chunks, high precision retrieval
+- **512 tokens** (default): Good balance for most RAG applications
+- **1024 tokens**: Larger context, fewer chunks, better for summarization
+- **2048 tokens**: Maximum, use for maintaining long-form context
 
 ### Pre-configured Scenarios
 

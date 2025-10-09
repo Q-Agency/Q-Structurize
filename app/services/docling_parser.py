@@ -331,6 +331,51 @@ class DoclingParser:
                 "content": None
             }
     
+    def parse_pdf_to_document(self, pdf_content: bytes):
+        """
+        Parse PDF content and return DoclingDocument object for further processing.
+        
+        This method is similar to parse_pdf() but returns the DoclingDocument object
+        instead of markdown string. This is useful for chunking and other document
+        processing workflows that need access to the structured document.
+        
+        Args:
+            pdf_content: PDF file content as bytes
+            
+        Returns:
+            DoclingDocument object if successful, None otherwise
+            
+        Raises:
+            RuntimeError: If Docling is not available or conversion fails
+        """
+        if not DOCLING_AVAILABLE or self.converter is None:
+            raise RuntimeError("Docling is not available")
+        
+        try:
+            # Create temporary file for PDF content
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                tmp_file.write(pdf_content)
+                tmp_file.flush()
+                tmp_path = tmp_file.name
+                
+                logger.info(f"Parsing PDF to document object (size: {len(pdf_content):,} bytes)")
+                
+                # Convert using pre-initialized converter
+                result = self.converter.convert(source=tmp_path)
+                
+                # Clean up temporary file
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+                
+                # Return the document object
+                return result.document
+                
+        except Exception as e:
+            logger.error(f"Error parsing PDF to document: {str(e)}", exc_info=True)
+            raise RuntimeError(f"Failed to parse PDF: {str(e)}") from e
+    
     def is_available(self) -> bool:
         """Check if Docling parsing is available."""
         return DOCLING_AVAILABLE and self.converter is not None
