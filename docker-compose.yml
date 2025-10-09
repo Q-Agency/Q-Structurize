@@ -3,6 +3,10 @@ version: "3.8"
 services:
   # GPU-accelerated service (default)
   q-structurize:
+    shm_size: "8g"
+    tmpfs:
+      - /dev/shm:size=8g,mode=1777
+      - /tmp:size=8g,mode=1777
     build:
       context: .
       dockerfile: Dockerfile
