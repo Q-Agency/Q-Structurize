@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 from enum import Enum
 
 
@@ -203,9 +203,9 @@ class ParseResponse(BaseModel):
         default=None,
         description="Parsed content in markdown format (only when chunking disabled)"
     )
-    chunks: Optional[List[ChunkData]] = Field(
+    chunks: Optional[Union[List[ChunkData], List[Dict[str, Any]]]] = Field(
         default=None,
-        description="List of document chunks (only when chunking enabled)"
+        description="List of document chunks - ChunkData models (custom mode) or raw dicts (native mode)"
     )
     total_chunks: Optional[int] = Field(
         default=None,

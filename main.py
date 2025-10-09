@@ -66,7 +66,8 @@ async def parse_pdf_file(
     enable_chunking: bool = Form(False, description="Enable hybrid chunking for RAG and semantic search"),
     max_tokens_per_chunk: int = Form(512, ge=128, le=2048, description="Maximum tokens per chunk (128-2048)"),
     merge_peers: bool = Form(True, description="Merge undersized successive chunks with same headings"),
-    include_markdown: bool = Form(False, description="Include full markdown content when chunking is enabled")
+    include_markdown: bool = Form(False, description="Include full markdown content when chunking is enabled"),
+    native_serialize: bool = Form(False, description="Use native Docling serialization (model_dump) for maximum metadata")
 ):
     """
     Parse PDF file using pre-initialized Docling pipeline with optimized settings.
@@ -86,6 +87,7 @@ async def parse_pdf_file(
     - **max_tokens_per_chunk**: Maximum tokens per chunk, 128-2048 (default: 512)
     - **merge_peers**: Auto-merge undersized chunks with same headings (default: true)
     - **include_markdown**: Include full markdown when chunking (default: false)
+    - **native_serialize**: Use native Docling metadata via model_dump() (default: false)
     
     **Example Usage:**
     ```bash
@@ -147,45 +149,73 @@ async def parse_pdf_file(
         
         # Branch: Chunking vs Standard Markdown
         if enable_chunking:
-            logger.info(f"Starting PDF parsing with chunking (max_tokens={max_tokens_per_chunk}, merge_peers={merge_peers})...")
+            mode = "native" if native_serialize else "custom"
+            logger.info(f"Starting PDF parsing with chunking (mode={mode}, max_tokens={max_tokens_per_chunk}, merge_peers={merge_peers})...")
             
             # Parse to DoclingDocument object
             document = docling_parser.parse_pdf_to_document(pdf_content)
             
-            # Chunk the document using hybrid chunker
-            chunks = hybrid_chunker.chunk_document(
-                document=document,
-                max_tokens=max_tokens_per_chunk,
-                merge_peers=merge_peers,
-                tokenizer=None  # Use HybridChunker's built-in tokenizer
-            )
-            
-            # Optionally include markdown
-            markdown_content = None
-            if include_markdown:
-                logger.info("Exporting full markdown content...")
-                markdown_content = document.export_to_markdown()
-            
-            # Convert chunk dicts to ChunkData models
-            chunk_models = [
-                ChunkData(
-                    text=chunk["text"],
-                    section_title=chunk["section_title"],
-                    chunk_index=chunk["chunk_index"],
-                    metadata=ChunkMetadata(**chunk["metadata"])
+            # Choose chunking function based on native_serialize parameter
+            if native_serialize:
+                # Use native serialization (model_dump) - returns raw chunk dicts
+                chunks = hybrid_chunker.chunk_document_native(
+                    document=document,
+                    max_tokens=max_tokens_per_chunk,
+                    merge_peers=merge_peers,
+                    tokenizer=None  # Use HybridChunker's built-in tokenizer
                 )
-                for chunk in chunks
-            ]
-            
-            logger.info(f"Successfully generated {len(chunk_models)} chunks")
-            
-            return ParseResponse(
-                message=f"PDF parsed and chunked successfully ({len(chunk_models)} chunks generated)",
-                status="success",
-                content=markdown_content,
-                chunks=chunk_models,
-                total_chunks=len(chunk_models)
-            )
+                
+                # Optionally include markdown
+                markdown_content = None
+                if include_markdown:
+                    logger.info("Exporting full markdown content...")
+                    markdown_content = document.export_to_markdown()
+                
+                logger.info(f"Successfully generated {len(chunks)} native chunks")
+                
+                # Return native chunks as-is (raw dicts with all Docling metadata)
+                return ParseResponse(
+                    message=f"PDF parsed and chunked with native serialization ({len(chunks)} chunks generated)",
+                    status="success",
+                    content=markdown_content,
+                    chunks=chunks,  # Return raw dicts for native mode
+                    total_chunks=len(chunks)
+                )
+            else:
+                # Use custom metadata extraction - returns curated metadata
+                chunks = hybrid_chunker.chunk_document(
+                    document=document,
+                    max_tokens=max_tokens_per_chunk,
+                    merge_peers=merge_peers,
+                    tokenizer=None  # Use HybridChunker's built-in tokenizer
+                )
+                
+                # Optionally include markdown
+                markdown_content = None
+                if include_markdown:
+                    logger.info("Exporting full markdown content...")
+                    markdown_content = document.export_to_markdown()
+                
+                # Convert chunk dicts to ChunkData models
+                chunk_models = [
+                    ChunkData(
+                        text=chunk["text"],
+                        section_title=chunk["section_title"],
+                        chunk_index=chunk["chunk_index"],
+                        metadata=ChunkMetadata(**chunk["metadata"])
+                    )
+                    for chunk in chunks
+                ]
+                
+                logger.info(f"Successfully generated {len(chunk_models)} custom chunks")
+                
+                return ParseResponse(
+                    message=f"PDF parsed and chunked successfully ({len(chunk_models)} chunks generated)",
+                    status="success",
+                    content=markdown_content,
+                    chunks=chunk_models,
+                    total_chunks=len(chunk_models)
+                )
         else:
             # Standard markdown parsing
             logger.info("Starting PDF parsing with pre-initialized Docling converter...")

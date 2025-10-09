@@ -72,6 +72,7 @@ Parse PDF files using Docling's StandardPdfPipeline with configurable options. S
 - `max_tokens_per_chunk` (optional, int): Maximum tokens per chunk, 128-2048 (default: 512)
 - `merge_peers` (optional, boolean): Auto-merge undersized chunks with same headings (default: true)
 - `include_markdown` (optional, boolean): Include full markdown when chunking enabled (default: false)
+- `native_serialize` (optional, boolean): Use native Docling serialization via model_dump() (default: false)
 - `pipeline_options` (optional, JSON string): Pipeline configuration options
   - `enable_ocr` (boolean): Enable OCR for scanned documents (default: false)
   - `ocr_languages` (array): Language codes like ["en", "es"] (default: ["en"])
@@ -246,6 +247,14 @@ curl -X POST "http://localhost:8878/parse/file" \
   -F "include_markdown=true"
 ```
 
+### Native Serialization (Full Docling Metadata)
+```bash
+curl -X POST "http://localhost:8878/parse/file" \
+  -F "file=@document.pdf" \
+  -F "enable_chunking=true" \
+  -F "native_serialize=true"
+```
+
 ### High-Performance Processing (Leverage 72-core Xeon)
 ```bash
 curl -X POST "http://localhost:8878/parse/file" \
@@ -300,19 +309,20 @@ print(f"Status: {result['status']}")
 print(f"Content:\n{result['content']}")
 ```
 
-### Python Example with Chunking for RAG
+### Python Example with Chunking for RAG (Custom Mode)
 ```python
 import requests
 
 url = "http://localhost:8878/parse/file"
 files = {"file": open("document.pdf", "rb")}
 
-# Enable chunking for RAG
+# Enable chunking for RAG with custom metadata
 data = {
     "enable_chunking": True,
     "max_tokens_per_chunk": 1024,
     "merge_peers": True,
-    "include_markdown": False
+    "include_markdown": False,
+    "native_serialize": False  # Custom mode (default)
 }
 
 response = requests.post(url, files=files, data=data)
@@ -328,6 +338,34 @@ for chunk in result['chunks']:
     print(f"  Pages: {chunk['metadata']['pages']}")
     print(f"  Content type: {chunk['metadata']['content_type']}")
     print(f"  Text preview: {chunk['text'][:100]}...")
+```
+
+### Python Example with Native Serialization (Full Metadata)
+```python
+import requests
+
+url = "http://localhost:8878/parse/file"
+files = {"file": open("document.pdf", "rb")}
+
+# Enable native serialization for maximum metadata
+data = {
+    "enable_chunking": True,
+    "max_tokens_per_chunk": 1024,
+    "native_serialize": True  # Native mode - full Docling metadata
+}
+
+response = requests.post(url, files=files, data=data)
+result = response.json()
+
+print(f"Status: {result['status']}")
+print(f"Total chunks: {result['total_chunks']}")
+
+# Native mode returns ALL Docling fields
+for chunk in result['chunks']:
+    print(f"\nChunk {chunk['chunk_index']}:")
+    print(f"  Native fields: {list(chunk.keys())[:10]}...")  # Show first 10 fields
+    print(f"  Prefixed text: {chunk['prefixed_text'][:100]}...")
+    print(f"  Contextualized: {chunk['contextualized_text'][:100]}...")
 ```
 
 ### JavaScript Example with Pipeline Options
@@ -396,6 +434,18 @@ Example: `"ocr_languages": ["en", "es"]` for English and Spanish
 - ✅ **Long Document Processing**: Split large documents into manageable pieces for LLM processing
 - ✅ **Context-Aware Indexing**: Maintain document structure and context in each chunk
 
+**Chunking Modes:**
+
+1. **Custom Mode** (`native_serialize=false`, default)
+   - Clean, curated metadata (content_type, heading_path, pages, captions)
+   - Structured ChunkData models
+   - Best for: Standard RAG applications, clean API responses
+
+2. **Native Mode** (`native_serialize=true`)
+   - Full Docling metadata via `model_dump()`
+   - All native chunk fields from Docling
+   - Best for: Maximum metadata, advanced use cases, debugging
+
 **Chunking Parameters:**
 
 | Parameter | Default | Range | Description |
@@ -404,6 +454,7 @@ Example: `"ocr_languages": ["en", "es"]` for English and Spanish
 | `max_tokens_per_chunk` | 512 | 128-2048 | Maximum tokens per chunk |
 | `merge_peers` | true | boolean | Auto-merge undersized successive chunks with same headings |
 | `include_markdown` | false | boolean | Include full markdown alongside chunks |
+| `native_serialize` | false | boolean | Use native Docling serialization (model_dump) for maximum metadata |
 
 **Chunk Metadata:**
 Each chunk includes rich metadata:
