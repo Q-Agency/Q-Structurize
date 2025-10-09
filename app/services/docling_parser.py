@@ -17,7 +17,7 @@ from typing import Optional, Dict, Any
 
 
 
-# Configure PyTorch threading (must be done before importing docling)
+# Configure PyTorch threading and GPU optimizations (must be done before importing docling)
 # PyTorch doesn't always respect TORCH_NUM_THREADS env var, so we set it explicitly
 try:
     import torch
@@ -26,6 +26,17 @@ try:
     torch.set_num_threads(num_threads)              # Intra-op parallelism
     torch.set_num_interop_threads(max(1, num_threads // 10))  # Inter-op (10% of threads)
     logging.getLogger(__name__).info(f"✅ PyTorch threading configured: {torch.get_num_threads()} intra-op, {torch.get_num_interop_threads()} inter-op threads")
+    
+    # Enable TF32 for better performance on Ampere/Hopper GPUs (H200)
+    # TF32 provides ~8x speedup with minimal accuracy loss
+    if torch.cuda.is_available():
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        try:
+            torch.set_float32_matmul_precision("high")  # PyTorch 2.x
+            logging.getLogger(__name__).info("✅ GPU optimizations enabled: TF32 matmul and cuDNN")
+        except Exception:
+            logging.getLogger(__name__).info("✅ GPU optimizations enabled: TF32 matmul and cuDNN (float32 precision not available)")
 except ImportError:
     logging.getLogger(__name__).warning("⚠️  PyTorch not available, skipping torch threading configuration")
 except Exception as e:
@@ -39,7 +50,7 @@ try:
     from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions, TableFormerMode
     from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
     from docling.datamodel.settings import settings
-    settings.perf.page_batch_size = 32
+    settings.perf.page_batch_size = int(os.environ.get('DOCLING_PAGE_BATCH_SIZE', '12'))
     DOCLING_AVAILABLE = True
 except ImportError as e:
     DOCLING_AVAILABLE = False
