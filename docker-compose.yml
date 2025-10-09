@@ -1,57 +1,13 @@
 version: "3.8"
 
 services:
-  # CPU-only service (use with: docker-compose --profile cpu up -d)
-  q-structurize-cpu:
-    profiles:
-      - cpu
+  # GPU-accelerated service (default)
+  q-structurize:
     build:
       context: .
-      dockerfile: Dockerfile.cpu
-    image: q-structurize:cpu
-    container_name: q-structurize-cpu
-    ports:
-      - "8878:8000"
-
-    # Persist data and caches to avoid re-downloading models
-    volumes:
-      - ./uploads:/app/uploads
-      - docling_models:/root/.cache/docling/models
-      - hf_cache:/app/.cache/huggingface
-
-    environment:
-      - PYTHONPATH=/app
-      # (Other envs are set in Dockerfile.cpu)
-
-    restart: unless-stopped
-
-    # Resource limits for 2x Xeon 6960P (144 cores)
-    mem_limit: 256g
-    cpus: 100
-
-    # Healthcheck
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
-    logging:
-      driver: json-file
-      options:
-        max-size: "100m"
-        max-file: "3"
-
-  # GPU service (use with: docker-compose --profile gpu up -d)
-  q-structurize-gpu:
-    profiles:
-      - gpu
-    build:
-      context: .
-      dockerfile: Dockerfile.gpu
+      dockerfile: Dockerfile
     image: q-structurize:gpu
-    container_name: q-structurize-gpu
+    container_name: q-structurize
     ports:
       - "8878:8000"
 

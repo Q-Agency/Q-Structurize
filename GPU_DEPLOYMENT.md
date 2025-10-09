@@ -1,104 +1,85 @@
 # GPU Deployment Guide
 
 ## Overview
-Q-Structurize now supports both CPU and GPU deployments with separate Dockerfiles optimized for each platform.
+Q-Structurize is optimized for NVIDIA H200 GPUs with CUDA 12.1 for high-performance PDF processing.
 
 ## Hardware Requirements
 
-### CPU Deployment
-- Target: 2x Intel Xeon 6960P (144 cores total)
-- RAM: 256GB
-- Dockerfile: `Dockerfile.cpu`
+- **GPUs**: 2x NVIDIA H200 (141GB HBM3 each)
+- **CUDA**: 12.1
+- **NVIDIA Driver**: 525+
+- **RAM**: 256GB
+- **OS**: Ubuntu 22.04 LTS
 
-### GPU Deployment
-- Target: 2x NVIDIA H200 GPUs
-- CUDA: 12.1
-- NVIDIA Driver: 525+
-- RAM: 256GB
-- Dockerfile: `Dockerfile.gpu`
+## Prerequisites
 
-## Prerequisites for GPU
+### NVIDIA Container Toolkit
 
-### 1. Install NVIDIA Docker Runtime
+You mentioned you already have **nvidia-container-toolkit** installed. Verify it's working:
+
 ```bash
-# Ubuntu 22.04
-distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
-curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
-  sudo tee /etc/apt/sources.list.d/nvidia-docker.list
-
-sudo apt-get update
-sudo apt-get install -y nvidia-docker2
-sudo systemctl restart docker
+# Test GPU access in Docker
+docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
 ```
 
-### 2. Verify GPU Access
-```bash
-docker run --rm --runtime=nvidia --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
-```
-
-You should see your H200 GPUs listed.
+You should see your H200 GPUs listed. ✅
 
 ## Deployment Commands
 
-### CPU Deployment
-```bash
-# Build CPU image
-docker-compose --profile cpu build
+### Build & Start (Simple!)
 
-# Start CPU service
-docker-compose --profile cpu up -d
+```bash
+# Build GPU image (first time: ~10-15 minutes)
+docker-compose build
+
+# Start service
+docker-compose up -d
 
 # View logs
-docker-compose logs -f q-structurize-cpu
-
-# Stop service
-docker-compose --profile cpu down
-```
-
-### GPU Deployment
-```bash
-# Build GPU image (may take 10-15 minutes first time)
-docker-compose --profile gpu build
-
-# Start GPU service
-docker-compose --profile gpu up -d
-
-# View logs
-docker-compose logs -f q-structurize-gpu
+docker-compose logs -f q-structurize
 
 # Check GPU utilization
 watch -n 1 nvidia-smi
 
 # Stop service
-docker-compose --profile gpu down
+docker-compose down
 ```
 
-## Configuration Differences
+### Quick Restart After Code Changes
 
-### CPU (Dockerfile.cpu)
 ```bash
-OMP_NUM_THREADS=100              # High thread count for CPU processing
-DOCLING_LAYOUT_BATCH_SIZE=64     # Moderate batch size
-DOCLING_ACCELERATOR_DEVICE=cpu
+# Thanks to optimized Docker layers, rebuilds are fast (~5-10 seconds)
+docker-compose build && docker-compose up -d
 ```
 
-### GPU (Dockerfile.gpu)
+## Configuration
+
+### GPU-Optimized Settings (in Dockerfile)
+
 ```bash
-OMP_NUM_THREADS=8                # Low thread count (GPU does the work)
-DOCLING_LAYOUT_BATCH_SIZE=128    # Large batch size (H200 has 141GB HBM3)
-DOCLING_ACCELERATOR_DEVICE=cuda
-CUDA_VISIBLE_DEVICES=0           # Use first GPU
-PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+# Threading (reduced - GPU does the work)
+OMP_NUM_THREADS=8
+MKL_NUM_THREADS=8
+TORCH_NUM_THREADS=8
+
+# Batch sizes (increased for H200's 141GB HBM3)
+DOCLING_LAYOUT_BATCH_SIZE=128
+DOCLING_OCR_BATCH_SIZE=128
+DOCLING_TABLE_BATCH_SIZE=128
+
+# GPU Configuration
+CUDA_VISIBLE_DEVICES=0                              # Use first H200
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True    # Better memory management
+DOCLING_ACCELERATOR_DEVICE=cuda                     # Enable GPU acceleration
 ```
 
-## Using Both GPUs
+### Using Both H200 GPUs
 
-To use both H200 GPUs, modify `docker-compose.yml`:
+Modify `docker-compose.yml`:
 
 ```yaml
 environment:
-  - NVIDIA_VISIBLE_DEVICES=all  # Use all GPUs
+  - NVIDIA_VISIBLE_DEVICES=all  # Use both GPUs
 
 deploy:
   resources:
@@ -109,52 +90,62 @@ deploy:
           capabilities: [gpu]
 ```
 
-## Performance Expectations
+## Performance
 
-### CPU Performance
-- Processing time: ~10-15 seconds per page
-- Best for: Development, testing, small workloads
+### Expected Processing Speed
 
-### GPU Performance (Single H200)
-- Processing time: ~0.5-2 seconds per page
-- Speedup: **5-10x faster than CPU**
-- Best for: Production, high-volume processing
+- **Processing time**: ~0.5-2 seconds per page
+- **Throughput**: ~30-120 pages per minute (single GPU)
+- **vs CPU**: 5-10x faster than CPU-only processing
 
 ### What Gets Accelerated
-- ✅ Layout detection (biggest speedup)
-- ✅ Table structure extraction
-- ✅ OCR processing (if enabled)
-- ✅ Picture classification (if enabled)
+
+- ✅ **Layout detection** (biggest speedup)
+- ✅ **Table structure extraction**
+- ✅ **OCR processing** (if enabled)
+- ✅ **Picture classification** (if enabled)
 - ⚠️ PDF I/O and markdown export (CPU-bound, minimal speedup)
 
-## Monitoring GPU Usage
+## Monitoring
 
 ### Real-time GPU Monitoring
+
 ```bash
-# In one terminal
+# Terminal 1: GPU usage
 watch -n 1 nvidia-smi
 
-# In another terminal
-docker-compose logs -f q-structurize-gpu
+# Terminal 2: Application logs
+docker-compose logs -f q-structurize
 ```
 
-### Expected GPU Logs
-When GPU is working, you'll see:
+### Expected Startup Logs
+
 ```
+🔍 Docling pipeline profiling enabled
 🚀 Initializing Docling DocumentConverter (ONE-TIME SETUP)
+⚙️  Configuration (from Dockerfile ENV):
    📊 Threading:
       - Threads: 8 (OMP_NUM_THREADS)
-      - Device: AcceleratorDevice.CUDA  # ← Confirms GPU is active
+      - Device: AcceleratorDevice.CUDA  # ← Confirms GPU is active!
    🚀 Batching:
       - Layout Batch: 128
       - Table Batch: 128
+✅ Converter initialized in 0.xx seconds
 ```
 
-### Performance Logs
+### Performance Logs (Per Request)
+
 ```
+📄 Starting PDF parsing...
+⏱️  Temp file write: 0.001s
+⏳ Processing document...
+   └─ Step 1: Document conversion
+   ✅ Conversion complete: 1.234s  # ← Fast with GPU!
+   └─ Step 2: Export to markdown
+   ✅ Export complete: 0.012s
 📊 Performance Breakdown:
    ├─ File I/O:        0.001s (0.1%)
-   ├─ Conversion:      1.234s (98.9%)  # ← Much faster with GPU!
+   ├─ Conversion:      1.234s (98.9%)  # ← GPU-accelerated
    ├─ Markdown Export: 0.012s (1.0%)
    └─ TOTAL:           1.247s
 ```
@@ -162,74 +153,154 @@ When GPU is working, you'll see:
 ## Troubleshooting
 
 ### GPU Not Detected
-```bash
-# Check NVIDIA runtime
-docker run --rm --runtime=nvidia --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
 
-# Check docker daemon config
+**Check if GPU is visible:**
+```bash
+docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
+```
+
+**Verify Docker daemon config:**
+```bash
 cat /etc/docker/daemon.json
 # Should contain: {"default-runtime": "nvidia"}
 ```
 
+**Restart Docker if needed:**
+```bash
+sudo systemctl restart docker
+```
+
+### Startup Shows "Device: AcceleratorDevice.CPU"
+
+This means GPU is not being used. Check:
+
+1. **NVIDIA runtime available?**
+   ```bash
+   docker info | grep -i runtime
+   # Should show: Runtimes: nvidia runc
+   ```
+
+2. **Environment variable set?**
+   ```bash
+   docker-compose exec q-structurize env | grep CUDA
+   # Should show: CUDA_VISIBLE_DEVICES=0
+   ```
+
+3. **Rebuild and restart:**
+   ```bash
+   docker-compose down
+   docker-compose build --no-cache
+   docker-compose up -d
+   ```
+
 ### Out of Memory Errors
-Reduce batch sizes in `Dockerfile.gpu`:
+
+H200 has 141GB HBM3, but if you still get OOM:
+
+**Option 1: Reduce batch sizes in `Dockerfile`:**
 ```bash
 DOCLING_LAYOUT_BATCH_SIZE=64  # Reduce from 128
 DOCLING_TABLE_BATCH_SIZE=64
 ```
 
+**Option 2: Check memory usage:**
+```bash
+nvidia-smi
+# Look at Memory-Usage column
+```
+
 ### Slow Performance
-1. Check GPU is actually being used: `nvidia-smi` should show activity
-2. Verify `Device: AcceleratorDevice.CUDA` in startup logs
-3. Ensure `CUDA_VISIBLE_DEVICES=0` is set
 
-## Switching Between CPU and GPU
+1. **Verify GPU is active:**
+   ```bash
+   nvidia-smi
+   # Should show processes under "Processes:" section
+   ```
 
-You can run both services simultaneously on different ports:
+2. **Check device in logs:**
+   ```bash
+   docker-compose logs q-structurize | grep "Device:"
+   # Must show: AcceleratorDevice.CUDA
+   ```
 
-```yaml
-# Modify docker-compose.yml
-q-structurize-cpu:
-  ports:
-    - "8878:8000"  # CPU on port 8878
+3. **Monitor during processing:**
+   ```bash
+   watch -n 0.1 nvidia-smi
+   # GPU utilization should spike to 80-100% during processing
+   ```
 
-q-structurize-gpu:
-  ports:
-    - "8879:8000"  # GPU on port 8879
-```
+## API Usage
 
-Then start both:
+### Test Endpoint
+
 ```bash
-docker-compose --profile cpu --profile gpu up -d
-```
-
-## API Endpoint
-
-Both CPU and GPU services expose the same API:
-```bash
-# Test endpoint
 curl http://localhost:8878/
+```
 
-# Parse PDF (replace port 8878 with 8879 for GPU)
+### Parse PDF
+
+```bash
 curl -X POST http://localhost:8878/parse/file \
   -F "file=@document.pdf" \
   -F "optimize_pdf=true"
 ```
 
-## Cost-Benefit Analysis
+### Get Parser Info
 
-### CPU Infrastructure
-- ✅ No special hardware
-- ✅ Easier to deploy
-- ⚠️ Slower processing
-- ⚠️ Higher latency for users
+```bash
+curl http://localhost:8878/parsers/info
+```
 
-### GPU Infrastructure
-- ✅ 5-10x faster
-- ✅ Better user experience
-- ✅ Can handle more concurrent requests
-- ⚠️ Requires NVIDIA GPUs
-- ⚠️ More complex setup
+Should show:
+```json
+{
+  "available": true,
+  "pipeline": "StandardPdfPipeline with ThreadedPdfPipelineOptions",
+  "configuration": {
+    "accelerator_device": "cuda",  // ← Confirms GPU
+    "num_threads": 8,
+    ...
+  }
+}
+```
 
-**Recommendation:** Use GPU for production, CPU for development/testing.
+## Files Structure
 
+```
+QStructurize/
+├── Dockerfile              # → Symlink to Dockerfile.gpu
+├── Dockerfile.gpu          # Main GPU Dockerfile (CUDA 12.1)
+├── Dockerfile.cpu          # Backup CPU-only version
+├── docker-compose.yml      # GPU-enabled service
+├── requirements.txt        # Python dependencies
+├── main.py                 # FastAPI application
+└── app/
+    └── services/
+        └── docling_parser.py  # GPU-ready parser
+```
+
+## Performance Tips
+
+1. **Keep models warm**: The first request after startup loads models into GPU memory (~1-2 seconds). Subsequent requests are instant.
+
+2. **Batch processing**: If processing multiple PDFs, send concurrent requests to maximize GPU utilization.
+
+3. **Monitor GPU utilization**: Use `nvidia-smi` to ensure GPU is at 80-100% during peak processing.
+
+4. **Use both GPUs**: For high-throughput scenarios, configure `NVIDIA_VISIBLE_DEVICES=all` and scale horizontally.
+
+## Production Recommendations
+
+- ✅ Use GPU for all production workloads
+- ✅ Enable batch sizes of 128+ for H200
+- ✅ Monitor with `nvidia-smi` and application logs
+- ✅ Set up health checks (included in docker-compose.yml)
+- ✅ Use persistent volumes for model caching
+- ⚠️ Keep Dockerfile.cpu as backup for development/testing
+
+## Support
+
+For issues or questions:
+1. Check logs: `docker-compose logs -f q-structurize`
+2. Verify GPU: `nvidia-smi`
+3. Check application health: `curl http://localhost:8878/`
