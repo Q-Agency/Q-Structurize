@@ -39,7 +39,7 @@ try:
     from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions, TableFormerMode
     from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
     from docling.datamodel.settings import settings
-    settings.perf.page_batch_size = 16
+    settings.perf.page_batch_size = 32
     DOCLING_AVAILABLE = True
 except ImportError as e:
     DOCLING_AVAILABLE = False
