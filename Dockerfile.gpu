@@ -1,5 +1,6 @@
-# CPU-only Dockerfile for Q-Structurize with StandardPdfPipeline
-FROM python:3.11-slim
+# GPU-enabled Dockerfile for Q-Structurize with StandardPdfPipeline
+# Optimized for 2x NVIDIA H200 GPUs with CUDA 12.1
+FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
 
 WORKDIR /app
 
@@ -10,9 +11,18 @@ ENV PYTHONUNBUFFERED=1 \
     HF_HOME=/app/.cache/huggingface \
     PATH="/usr/local/bin:${PATH}"
 
-# System deps (lean)
+# Install Python 3.11 and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+      software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+      python3.11 \
+      python3.11-dev \
+      python3.11-distutils \
+      python3-pip \
       gcc g++ libgomp1 libgl1 libglib2.0-0 curl wget git \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip
@@ -21,7 +31,10 @@ RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
 # ---- cache-friendly boundary ----
 # Install Python deps first (cacheable)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Install PyTorch with CUDA 12.1 support, then other requirements
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu121 && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Prepare cache directories (these will be volumes at runtime)
 RUN mkdir -p /root/.cache/docling/models ${HF_HOME} /app/uploads
@@ -35,17 +48,20 @@ RUN echo "Pre-downloading Docling models (optional)..." && \
 RUN ls -lah /root/.cache/docling/models || true
 
 # Runtime environment variables (change these without invalidating cache layers above)
+# GPU-optimized settings for H200
 ENV LOG_LEVEL=DEBUG \
     TOKENIZERS_PARALLELISM=false \
-    OMP_NUM_THREADS=100 \
-    MKL_NUM_THREADS=100 \
-    OPENBLAS_NUM_THREADS=100 \
-    NUMEXPR_NUM_THREADS=100 \
-    TORCH_NUM_THREADS=100 \
+    CUDA_VISIBLE_DEVICES=0 \
+    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+    OMP_NUM_THREADS=8 \
+    MKL_NUM_THREADS=8 \
+    OPENBLAS_NUM_THREADS=8 \
+    NUMEXPR_NUM_THREADS=8 \
+    TORCH_NUM_THREADS=8 \
     KMP_BLOCKTIME=1 \
     KMP_SETTINGS=1 \
     KMP_AFFINITY="granularity=fine,compact,1,0" \
-    MALLOC_ARENA_MAX=4 \
+    MALLOC_ARENA_MAX=2 \
     DOCLING_ENABLE_OCR=false \
     DOCLING_OCR_LANGUAGES=en \
     DOCLING_DO_TABLE_STRUCTURE=true \
@@ -55,16 +71,16 @@ ENV LOG_LEVEL=DEBUG \
     DOCLING_DO_FORMULA_ENRICHMENT=false \
     DOCLING_DO_PICTURE_CLASSIFICATION=false \
     DOCLING_DO_PICTURE_DESCRIPTION=false \
-    DOCLING_LAYOUT_BATCH_SIZE=64 \
-    DOCLING_OCR_BATCH_SIZE=32 \
-    DOCLING_TABLE_BATCH_SIZE=64 \
-    DOCLING_QUEUE_MAX_SIZE=1000 \
+    DOCLING_LAYOUT_BATCH_SIZE=128 \
+    DOCLING_OCR_BATCH_SIZE=128 \
+    DOCLING_TABLE_BATCH_SIZE=128 \
+    DOCLING_QUEUE_MAX_SIZE=2000 \
     DOCLING_BATCH_TIMEOUT=0.5 \
-    DOCLING_ACCELERATOR_DEVICE=cpu
+    DOCLING_ACCELERATOR_DEVICE=cuda
 
 # Finally copy app sources (changes here don't invalidate pip layer)
 COPY . .
 
 EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 

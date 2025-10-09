@@ -1,12 +1,15 @@
 version: "3.8"
 
 services:
-  q-structurize:
+  # CPU-only service (use with: docker-compose --profile cpu up -d)
+  q-structurize-cpu:
+    profiles:
+      - cpu
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.cpu
     image: q-structurize:cpu
-    container_name: q-structurize
+    container_name: q-structurize-cpu
     ports:
       - "8878:8000"
 
@@ -18,17 +21,66 @@ services:
 
     environment:
       - PYTHONPATH=/app
-      # (Other envs are set in Dockerfile)
+      # (Other envs are set in Dockerfile.cpu)
 
     restart: unless-stopped
 
-    # Compose (non-Swarm) resource hints
-    # Use these only if you really need to constrain:
-    # mem_limit works with compose; cpus is supported by recent compose versions.
+    # Resource limits for 2x Xeon 6960P (144 cores)
     mem_limit: 256g
     cpus: 100
 
-    # Healthcheck: point to a real 200 endpoint (e.g., /healthz)
+    # Healthcheck
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  # GPU service (use with: docker-compose --profile gpu up -d)
+  q-structurize-gpu:
+    profiles:
+      - gpu
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    image: q-structurize:gpu
+    container_name: q-structurize-gpu
+    ports:
+      - "8878:8000"
+
+    # Persist data and caches to avoid re-downloading models
+    volumes:
+      - ./uploads:/app/uploads
+      - docling_models:/root/.cache/docling/models
+      - hf_cache:/app/.cache/huggingface
+
+    environment:
+      - PYTHONPATH=/app
+      - NVIDIA_VISIBLE_DEVICES=0  # Use first H200
+      # (Other envs are set in Dockerfile.gpu)
+
+    restart: unless-stopped
+
+    # GPU runtime and resource allocation
+    runtime: nvidia
+    deploy:
+      resources:
+        limits:
+          memory: 256G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    # Healthcheck
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/"]
       interval: 30s
