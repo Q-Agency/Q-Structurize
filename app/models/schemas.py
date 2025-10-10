@@ -138,10 +138,10 @@ class ChunkMetadata(BaseModel):
         default=None,
         description="List of page numbers where this chunk appears"
     )
-    captions: Optional[List[str]] = Field(
-        default=None,
-        description="Captions for tables or figures in this chunk"
-    )
+    # captions: Optional[List[str]] = Field(
+    #     default=None,
+    #     description="Captions for tables or figures in this chunk"
+    # )
     has_table_structure: Optional[bool] = Field(
         default=None,
         description="Whether this chunk contains table structure"
@@ -157,7 +157,6 @@ class ChunkMetadata(BaseModel):
                 "content_type": "text",
                 "heading_path": "Chapter 1 > Introduction",
                 "pages": [1, 2],
-                "captions": ["Figure 1: Overview diagram"],
                 "doc_items_count": 5
             }
         }
