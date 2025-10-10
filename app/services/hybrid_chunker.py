@@ -1,9 +1,22 @@
 """
 Hybrid chunking service using Docling's native HybridChunker.
 
-This module provides two chunking approaches:
-1. Custom metadata extraction (clean, curated metadata)
-2. Native serialization (full Docling metadata via model_dump())
+This module provides flexible chunking with optional metadata levels:
+
+FEATURES:
+- Curated metadata extraction via extract_chunk_metadata()
+- Optional complete Docling metadata via chunk.model_dump()
+- Flexible output: choose between curated or full metadata
+- Clean structure: {text, section_title, chunk_index, metadata, [full_metadata]}
+
+USAGE:
+- Default: Returns curated metadata for common use cases
+- Full metadata: Set include_full_metadata=True for maximum information
+
+ARCHITECTURE:
+- Shared helpers for DRY code (_create_chunker, _process_chunk_text, _log_chunk_statistics)
+- Single function handles both metadata approaches
+- Clean separation between curated and complete metadata
 """
 
 import logging
@@ -13,15 +26,87 @@ from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling_core.transforms.chunker import BaseChunk
 from docling_core.types.doc.document import DoclingDocument
 
-# Try alternative import path for newer Docling versions
-try:
-    from docling.chunking import HybridChunker as DoclingHybridChunker
-    DOCLING_CHUNKING_AVAILABLE = True
-except ImportError:
-    DoclingHybridChunker = HybridChunker
-    DOCLING_CHUNKING_AVAILABLE = False
-
 logger = logging.getLogger(__name__)
+
+# Export public API
+__all__ = [
+    'chunk_document',
+    'extract_chunk_metadata',
+]
+
+
+def _create_chunker(
+    max_tokens: int,
+    merge_peers: bool,
+    tokenizer: Optional[Any]
+) -> HybridChunker:
+    """
+    Initialize HybridChunker with common parameters.
+    
+    Args:
+        max_tokens: Maximum tokens per chunk
+        merge_peers: Whether to merge undersized successive chunks with same headings
+        tokenizer: Optional tokenizer (uses HybridChunker's built-in if None)
+        
+    Returns:
+        Initialized HybridChunker instance
+    """
+    # Build chunker parameters
+    chunker_params = {
+        "max_tokens": max_tokens,
+        "merge_peers": merge_peers,
+    }
+    
+    # Only pass tokenizer if explicitly provided
+    if tokenizer is not None:
+        chunker_params["tokenizer"] = tokenizer
+        logger.info("Using provided tokenizer")
+    else:
+        logger.info("Using HybridChunker's built-in tokenizer")
+    
+    chunker = HybridChunker(**chunker_params)
+    logger.debug(f"HybridChunker initialized with params: {chunker_params}")
+    
+    return chunker
+
+
+def _process_chunk_text(chunker: HybridChunker, chunk: BaseChunk) -> tuple[str, str]:
+    contextualized_text = chunker.contextualize(chunk)
+    prefixed_text = f"search_document: {contextualized_text}"
+    return contextualized_text, prefixed_text
+
+
+def _log_chunk_statistics(
+    chunks: List[Dict[str, Any]],
+    start_time: float,
+    text_field: str = "text",
+    is_native: bool = False
+):
+    """
+    Log chunking statistics.
+    
+    Args:
+        chunks: List of chunk dictionaries
+        start_time: Start time of chunking process
+        text_field: Field name containing the text to measure
+        is_native: Whether this is native chunking (for log messages)
+    """
+    chunking_time = time.time() - start_time
+    chunk_type = "Native chunking" if is_native else "Document chunking"
+    
+    logger.info(
+        f"{chunk_type} completed in {chunking_time:.2f}s. "
+        f"Generated {len(chunks)} chunks (avg {len(chunks)/chunking_time:.1f} chunks/s)"
+    )
+    
+    # Log statistics
+    if chunks:
+        avg_length = sum(len(c.get(text_field, '')) for c in chunks) / len(chunks)
+        logger.info(f"Chunk statistics: avg_length={avg_length:.0f} chars")
+        
+        # For native chunks, show available fields
+        if is_native:
+            logger.info(f"Native chunk fields: {list(chunks[0].keys())[:10]}...")
 
 
 def extract_chunk_metadata(chunk: BaseChunk) -> Dict[str, Any]:
@@ -96,65 +181,65 @@ def chunk_document(
     document: DoclingDocument,
     max_tokens: int = 512,
     merge_peers: bool = True,
-    tokenizer: Optional[Any] = None
+    tokenizer: Optional[Any] = None,
+    include_full_metadata: bool = False
 ) -> List[Dict[str, Any]]:
     """
-    Chunk a DoclingDocument using HybridChunker with modern features.
+    Chunk a DoclingDocument with flexible metadata options.
     
-    This function uses Docling's native HybridChunker with built-in features like
-    merge_peers for efficient chunk consolidation. It extracts rich metadata from
-    each chunk for better retrieval and context understanding.
+    APPROACH:
+    - Always includes curated metadata via extract_chunk_metadata()
+    - Optionally includes complete Docling metadata via chunk.model_dump()
+    
+    METADATA OPTIONS:
+    - Default (include_full_metadata=False):
+      Returns: {text, section_title, chunk_index, metadata}
+      - Clean, curated metadata fields
+      - Simplified structure for common use cases
+      
+    - Full metadata (include_full_metadata=True):
+      Returns: {text, section_title, chunk_index, metadata, full_metadata}
+      - Includes all curated metadata PLUS complete Docling metadata
+      - Maximum information preservation
     
     Args:
         document: DoclingDocument to chunk
         max_tokens: Maximum tokens per chunk (default: 512)
         merge_peers: Whether to merge undersized successive chunks with same headings (default: True)
         tokenizer: Optional tokenizer (uses HybridChunker's built-in if None)
+        include_full_metadata: Include complete Docling metadata via model_dump() (default: False)
         
     Returns:
-        List of chunk dictionaries with text, metadata, and section info
+        List of chunk dictionaries with text, metadata, and optional full metadata
         
     Example:
-        >>> chunks = chunk_document(document, max_tokens=1024, merge_peers=True)
-        >>> print(f"Generated {len(chunks)} chunks")
-        >>> print(chunks[0]['text'])
+        >>> # Standard chunking with curated metadata
+        >>> chunks = chunk_document(document, max_tokens=1024)
+        >>> print(chunks[0].keys())  # ['text', 'section_title', 'chunk_index', 'metadata']
+        
+        >>> # With complete Docling metadata
+        >>> chunks = chunk_document(document, max_tokens=1024, include_full_metadata=True)
+        >>> print(chunks[0].keys())  # Includes 'full_metadata' with all Docling fields
     """
     logger.info(f"Starting document chunking: max_tokens={max_tokens}, merge_peers={merge_peers}")
     start_time = time.time()
     
-    # Initialize HybridChunker with modern parameters
-    chunker_params = {
-        "max_tokens": max_tokens,
-        "merge_peers": merge_peers,
-    }
-    
-    # Only pass tokenizer if explicitly provided
-    if tokenizer is not None:
-        chunker_params["tokenizer"] = tokenizer
-        logger.info("Using provided tokenizer")
-    else:
-        logger.info("Using HybridChunker's built-in tokenizer")
-    
-    chunker = HybridChunker(**chunker_params)
-    logger.debug(f"HybridChunker initialized with params: {chunker_params}")
+    # Initialize chunker (shared logic)
+    chunker = _create_chunker(max_tokens, merge_peers, tokenizer)
     
     chunks = []
     
     # Process document with HybridChunker
     for chunk_idx, chunk in enumerate(chunker.chunk(document)):
-        # Add contextualization to each chunk (adds heading context)
-        contextualized_text = chunker.contextualize(chunk)
-        
-        # Add search prefix for optimal embedding (Nomic convention)
-        # Even without Nomic tokenizer, this prefix helps with semantic search
-        prefixed_text = f"search_document: {contextualized_text}"
+        # Process text (shared logic)
+        contextualized_text, prefixed_text = _process_chunk_text(chunker, chunk)
         
         # Extract section title from headings (most specific heading)
         section_title = None
         if hasattr(chunk.meta, "headings") and chunk.meta.headings:
             section_title = chunk.meta.headings[-1]  # Use last (most specific) heading
         
-        # Extract metadata
+        # Extract curated metadata
         metadata = extract_chunk_metadata(chunk)
         
         # Create chunk data dictionary
@@ -165,116 +250,17 @@ def chunk_document(
             "metadata": metadata
         }
         
+        # Optionally include complete Docling metadata
+        if include_full_metadata:
+            chunk_data["full_metadata"] = chunk.model_dump()
+        
         chunks.append(chunk_data)
         
         if chunk_idx % 10 == 0 and chunk_idx > 0:
             logger.debug(f"Processed {chunk_idx} chunks...")
     
-    chunking_time = time.time() - start_time
-    logger.info(
-        f"Document chunking completed in {chunking_time:.2f}s. "
-        f"Generated {len(chunks)} chunks (avg {len(chunks)/chunking_time:.1f} chunks/s)"
-    )
-    
-    # Log statistics
-    if chunks:
-        avg_length = sum(len(c["text"]) for c in chunks) / len(chunks)
-        logger.info(f"Chunk statistics: avg_length={avg_length:.0f} chars")
-    
-    return chunks
-
-
-def chunk_document_native(
-    document: DoclingDocument,
-    max_tokens: int = 512,
-    merge_peers: bool = True,
-    tokenizer: Optional[Any] = None
-) -> List[Dict[str, Any]]:
-    """
-    Chunk a DoclingDocument using native serialization (model_dump).
-    
-    This is the SIMPLE approach that returns ALL native Docling metadata
-    using Pydantic's model_dump() method. This gives you the full chunk
-    structure as defined by Docling without custom filtering.
-    
-    Use this when you need:
-    - Complete metadata from Docling
-    - Native chunk structure
-    - Maximum information preservation
-    
-    Args:
-        document: DoclingDocument to chunk
-        max_tokens: Maximum tokens per chunk (default: 512)
-        merge_peers: Whether to merge undersized successive chunks with same headings (default: True)
-        tokenizer: Optional tokenizer (uses HybridChunker's built-in if None)
-        
-    Returns:
-        List of chunk dictionaries with full native metadata via model_dump()
-        
-    Example:
-        >>> chunks = chunk_document_native(document, max_tokens=1024)
-        >>> print(chunks[0].keys())  # All native Docling fields
-    """
-    logger.info(f"Native chunking: max_tokens={max_tokens}, merge_peers={merge_peers}")
-    start_time = time.time()
-    
-    # Use the appropriate HybridChunker import
-    ChunkerClass = DoclingHybridChunker if DOCLING_CHUNKING_AVAILABLE else HybridChunker
-    
-    # Initialize chunker
-    chunker_params = {
-        "max_tokens": max_tokens,
-        "merge_peers": merge_peers,
-    }
-    
-    if tokenizer is not None:
-        chunker_params["tokenizer"] = tokenizer
-        logger.info("Using provided tokenizer for native chunking")
-    else:
-        logger.info("Using HybridChunker's built-in tokenizer for native chunking")
-    
-    chunker = ChunkerClass(**chunker_params)
-    logger.debug(f"Native HybridChunker initialized with params: {chunker_params}")
-    
-    chunks = []
-    
-    # Process document - try dl_doc parameter first, fall back to positional
-    try:
-        chunk_iterator = chunker.chunk(dl_doc=document)
-    except TypeError:
-        # Fallback for older versions that don't use dl_doc parameter
-        chunk_iterator = chunker.chunk(document)
-    
-    for chunk_idx, chunk in enumerate(chunk_iterator):
-        # Get ALL metadata automatically via model_dump()
-        chunk_dict = chunk.model_dump()
-        
-        # Add contextualized text for embeddings
-        contextualized_text = chunker.contextualize(chunk)
-        chunk_dict['contextualized_text'] = contextualized_text
-        
-        # Add search prefix for optimal embedding (Nomic convention)
-        chunk_dict['prefixed_text'] = f"search_document: {contextualized_text}"
-        
-        # Add chunk index
-        chunk_dict['chunk_index'] = chunk_idx
-        
-        chunks.append(chunk_dict)
-        
-        if chunk_idx % 10 == 0 and chunk_idx > 0:
-            logger.debug(f"Processed {chunk_idx} native chunks...")
-    
-    chunking_time = time.time() - start_time
-    logger.info(
-        f"Native chunking completed in {chunking_time:.2f}s. "
-        f"Generated {len(chunks)} chunks (avg {len(chunks)/chunking_time:.1f} chunks/s)"
-    )
-    
-    # Log statistics
-    if chunks:
-        avg_length = sum(len(c.get('prefixed_text', '')) for c in chunks) / len(chunks)
-        logger.info(f"Native chunk statistics: avg_length={avg_length:.0f} chars")
-        logger.info(f"Native chunk fields: {list(chunks[0].keys())[:10]}...")  # Show first 10 keys
+    # Log statistics (shared logic)
+    _log_chunk_statistics(chunks, start_time, text_field="text", is_native=False)
     
     return chunks
 
