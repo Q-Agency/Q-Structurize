@@ -131,7 +131,8 @@ async def parse_pdf_file(
                     text=chunk["text"],
                     section_title=chunk["section_title"],
                     chunk_index=chunk["chunk_index"],
-                    metadata=ChunkMetadata(**chunk["metadata"])
+                    metadata=ChunkMetadata(**chunk["metadata"]),
+                    full_metadata=chunk.get("full_metadata")  # Include if present
                 )
                 for chunk in chunks
             ]

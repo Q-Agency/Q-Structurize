@@ -178,6 +178,10 @@ class ChunkData(BaseModel):
     metadata: ChunkMetadata = Field(
         description="Rich metadata about the chunk content and location"
     )
+    full_metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Complete Docling metadata from model_dump() (included when include_full_metadata=True)"
+    )
     
     class Config:
         json_schema_extra = {
