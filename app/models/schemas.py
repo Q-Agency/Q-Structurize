@@ -165,12 +165,12 @@ class ChunkMetadata(BaseModel):
 
 class ChunkData(BaseModel):
     """A single document chunk with text and metadata."""
-    text: str = Field(
-        description="The chunk text with search prefix and contextualization"
-    )
     section_title: Optional[str] = Field(
         default=None,
         description="The section title (most specific heading) for this chunk"
+    )
+    text: str = Field(
+        description="The chunk text with search prefix and contextualization"
     )
     chunk_index: int = Field(
         description="Index of this chunk in the document (0-based)"
@@ -186,8 +186,8 @@ class ChunkData(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "text": "search_document: Introduction\n\nThis document presents...",
                 "section_title": "Introduction",
+                "text": "search_document: Introduction\n\nThis document presents...",
                 "chunk_index": 0,
                 "metadata": {
                     "content_type": "text",
@@ -199,19 +199,22 @@ class ChunkData(BaseModel):
         }
 
 
+class ChunkingData(BaseModel):
+    """Data container for chunking results."""
+    chunks: List[ChunkData] = Field(
+        description="List of document chunks with metadata"
+    )
+
+
 class ParseResponse(BaseModel):
     """Response model for PDF parsing endpoint."""
     message: str
     status: str
+    data: Optional[ChunkingData] = Field(
+        default=None,
+        description="Chunking data (only when chunking is enabled)"
+    )
     content: Optional[str] = Field(
         default=None,
         description="Parsed content in markdown format (only when chunking disabled)"
-    )
-    chunks: Optional[Union[List[ChunkData], List[Dict[str, Any]]]] = Field(
-        default=None,
-        description="List of document chunks - ChunkData models (custom mode) or raw dicts (native mode)"
-    )
-    total_chunks: Optional[int] = Field(
-        default=None,
-        description="Total number of chunks generated (only when chunking enabled)"
     )

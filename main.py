@@ -5,7 +5,7 @@ import logging
 from app.services.pdf_optimizer import PDFOptimizer
 from app.services.docling_parser import DoclingParser
 from app.services import hybrid_chunker
-from app.models.schemas import ParseResponse, ChunkData, ChunkMetadata
+from app.models.schemas import ParseResponse, ChunkData, ChunkMetadata, ChunkingData
 from app.config import PIPELINE_OPTIONS_CONFIG, get_custom_openapi
 
 # Configure logging
@@ -119,17 +119,11 @@ async def parse_pdf_file(
                 include_full_metadata=include_full_metadata
             )
             
-            # Optionally include markdown
-            markdown_content = None
-            if include_markdown:
-                logger.info("Exporting full markdown content...")
-                markdown_content = document.export_to_markdown()
-            
             # Convert chunk dicts to ChunkData models
             chunk_models = [
                 ChunkData(
-                    text=chunk["text"],
                     section_title=chunk["section_title"],
+                    text=chunk["text"],
                     chunk_index=chunk["chunk_index"],
                     metadata=ChunkMetadata(**chunk["metadata"]),
                     full_metadata=chunk.get("full_metadata")  # Include if present
@@ -140,11 +134,9 @@ async def parse_pdf_file(
             logger.info(f"Successfully generated {len(chunk_models)} chunks")
             
             return ParseResponse(
-                message=f"PDF parsed and chunked successfully ({len(chunk_models)} chunks generated)",
+                message="Document chunked successfully",
                 status="success",
-                content=markdown_content,
-                chunks=chunk_models,
-                total_chunks=len(chunk_models)
+                data=ChunkingData(chunks=chunk_models)
             )
         else:
             # Standard markdown parsing
