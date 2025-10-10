@@ -154,16 +154,16 @@ def extract_chunk_metadata(chunk: BaseChunk) -> Dict[str, Any]:
     if page_numbers:
         metadata["pages"] = sorted(list(page_numbers))
     
-    # Extract captions from tables and figures
-    captions = []
-    if hasattr(chunk.meta, "doc_items") and chunk.meta.doc_items:
-        for item in chunk.meta.doc_items:
-            if hasattr(item, "label") and item.label == "table":
-                if hasattr(item, "captions") and item.captions:
-                    captions.extend(item.captions)
-    
-    if captions:
-        metadata["captions"] = captions
+    # Extract captions from tables and figures (commented out for now)
+    # captions = []
+    # if hasattr(chunk.meta, "doc_items") and chunk.meta.doc_items:
+    #     for item in chunk.meta.doc_items:
+    #         if hasattr(item, "label") and item.label == "table":
+    #             if hasattr(item, "captions") and item.captions:
+    #                 captions.extend(item.captions)
+    # 
+    # if captions:
+    #     metadata["captions"] = captions
     
     # Extract table data if present (simplified - just mark as table)
     if content_type == "table":
