@@ -5,6 +5,7 @@ import logging
 from app.services.pdf_optimizer import PDFOptimizer
 from app.services.docling_parser import DoclingParser
 from app.services import hybrid_chunker
+from app.services.tokenizer_manager import get_tokenizer_manager
 from app.models.schemas import ParseResponse, ChunkData, ChunkMetadata, ChunkingData
 from app.config import PIPELINE_OPTIONS_CONFIG, get_custom_openapi
 
@@ -30,8 +31,8 @@ docling_parser = DoclingParser()
 
 app = FastAPI(
     title="Q-Structurize",
-    description="Advanced PDF parsing and structured text extraction API using Docling StandardPdfPipeline with ThreadedPdfPipelineOptions for batching and backpressure control. Features include layout analysis, hybrid chunking for RAG, optional OCR with multi-language support, configurable table extraction, batched processing, and multi-threaded processing optimized for 2x 72-core Xeon 6960P (144 cores).",
-    version="2.3.0",
+    description="Advanced PDF parsing and structured text extraction API using Docling StandardPdfPipeline with ThreadedPdfPipelineOptions for batching and backpressure control. Features include layout analysis, hybrid chunking for RAG with custom HuggingFace tokenizers, optional OCR with multi-language support, configurable table extraction, batched processing, and multi-threaded processing optimized for 2x 72-core Xeon 6960P (144 cores).",
+    version="2.4.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -66,6 +67,7 @@ async def parse_pdf_file(
     enable_chunking: bool = Form(False, description="Enable hybrid chunking for RAG and semantic search"),
     max_tokens_per_chunk: int = Form(512, ge=128, le=2048, description="Maximum tokens per chunk (128-2048)"),
     merge_peers: bool = Form(True, description="Merge undersized successive chunks with same headings"),
+    embedding_model: Optional[str] = Form(None, description="HuggingFace embedding model name for tokenization (e.g., 'sentence-transformers/all-MiniLM-L6-v2'). If not specified, uses HybridChunker's built-in tokenizer"),
     include_markdown: bool = Form(False, description="Include full markdown content when chunking is enabled"),
     include_full_metadata: bool = Form(False, description="Include complete Docling metadata (model_dump) in addition to curated metadata")
 ):
@@ -110,12 +112,28 @@ async def parse_pdf_file(
             # Parse to DoclingDocument object
             document = docling_parser.parse_pdf_to_document(pdf_content)
             
+            # Load tokenizer if embedding model is specified
+            tokenizer = None
+            if embedding_model:
+                try:
+                    tokenizer_manager = get_tokenizer_manager()
+                    tokenizer = tokenizer_manager.get_tokenizer(embedding_model)
+                    logger.info(f"Using custom tokenizer from model: {embedding_model}")
+                except Exception as e:
+                    logger.error(f"Failed to load tokenizer for model '{embedding_model}': {str(e)}")
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid embedding model: {str(e)}"
+                    )
+            else:
+                logger.info("Using HybridChunker's built-in tokenizer")
+            
             # Chunk document with optional full metadata
             chunks = hybrid_chunker.chunk_document(
                 document=document,
                 max_tokens=max_tokens_per_chunk,
                 merge_peers=merge_peers,
-                tokenizer=None,  # Use HybridChunker's built-in tokenizer
+                tokenizer=tokenizer,
                 include_full_metadata=include_full_metadata
             )
             
@@ -177,12 +195,13 @@ async def root():
             "Pre-initialized Docling converter for instant processing",
             "Layout analysis and document structure extraction",
             "Hybrid chunking with native merge_peers for RAG",
+            "Custom embedding model tokenizers (any HuggingFace model)",
             "Batched processing with ThreadedPdfPipelineOptions",
             "ENV-based configuration (modify Dockerfile and rebuild)",
             "Multi-threaded processing (optimized for 2x 72-core Xeon 6960P)",
             "Structured markdown or semantic chunks output"
         ],
-        "version": "2.3.0",
+        "version": "2.4.0",
         "endpoints": {
             "parse": "/parse/file - Parse PDF with configurable options",
             "parser_info": "/parsers/info - Get parser capabilities",

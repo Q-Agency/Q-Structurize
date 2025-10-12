@@ -282,6 +282,57 @@ PIPELINE_OPTIONS_CONFIG = {
             }
         }
     },
+    "chunking_options": {
+        "enable_chunking": {
+            "type": "boolean",
+            "default": False,
+            "description": "Enable hybrid chunking for RAG and semantic search",
+            "notes": "When enabled, returns structured chunks instead of full markdown"
+        },
+        "max_tokens_per_chunk": {
+            "type": "integer",
+            "default": 512,
+            "min": 128,
+            "max": 2048,
+            "description": "Maximum tokens per chunk (128-2048)",
+            "notes": "Should match your embedding model's token limit"
+        },
+        "merge_peers": {
+            "type": "boolean",
+            "default": True,
+            "description": "Merge undersized successive chunks with same headings",
+            "notes": "Helps avoid very small chunks"
+        },
+        "embedding_model": {
+            "type": "string",
+            "default": None,
+            "description": "HuggingFace embedding model name for tokenization",
+            "examples": [
+                "sentence-transformers/all-MiniLM-L6-v2",
+                "BAAI/bge-small-en-v1.5",
+                "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                "intfloat/e5-small-v2"
+            ],
+            "notes": "If not specified, uses HybridChunker's built-in tokenizer. Specify a model to match your embedding pipeline's tokenizer for accurate token counting.",
+            "use_cases": [
+                "Match tokenizer to your embedding model for accurate chunking",
+                "Ensure chunks fit within your model's context window",
+                "Use multilingual tokenizers for non-English documents"
+            ]
+        },
+        "include_markdown": {
+            "type": "boolean",
+            "default": False,
+            "description": "Include full markdown content when chunking is enabled",
+            "notes": "Adds complete document markdown to response"
+        },
+        "include_full_metadata": {
+            "type": "boolean",
+            "default": False,
+            "description": "Include complete Docling metadata in addition to curated metadata",
+            "notes": "Adds full_metadata field with complete Docling metadata dump"
+        }
+    },
     "usage": {
         "note": "Pass options as individual form fields",
         "example_curl": '''curl -X POST "http://localhost:8000/parse/file" \\
@@ -305,6 +356,20 @@ PIPELINE_OPTIONS_CONFIG = {
   -F "queue_max_size=500" \\
   -F "batch_timeout_seconds=3.0"
 ''',
+        "example_curl_chunking": '''curl -X POST "http://localhost:8000/parse/file" \\
+  -F "file=@document.pdf" \\
+  -F "enable_chunking=true" \\
+  -F "max_tokens_per_chunk=512" \\
+  -F "merge_peers=true" \\
+  -F "embedding_model=sentence-transformers/all-MiniLM-L6-v2"
+''',
+        "example_curl_chunking_custom": '''curl -X POST "http://localhost:8000/parse/file" \\
+  -F "file=@document.pdf" \\
+  -F "enable_chunking=true" \\
+  -F "max_tokens_per_chunk=768" \\
+  -F "embedding_model=BAAI/bge-small-en-v1.5" \\
+  -F "include_full_metadata=true"
+''',
         "example_python": '''import requests
 
 response = requests.post(
@@ -314,6 +379,30 @@ response = requests.post(
         "enable_ocr": "true",
         "num_threads": "16",
         "table_mode": "accurate"
+    }
+)
+''',
+        "example_python_chunking": '''import requests
+
+# With custom embedding model tokenizer
+response = requests.post(
+    "http://localhost:8000/parse/file",
+    files={"file": open("document.pdf", "rb")},
+    data={
+        "enable_chunking": "true",
+        "max_tokens_per_chunk": "512",
+        "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+        "merge_peers": "true"
+    }
+)
+
+# Using default tokenizer
+response = requests.post(
+    "http://localhost:8000/parse/file",
+    files={"file": open("document.pdf", "rb")},
+    data={
+        "enable_chunking": "true",
+        "max_tokens_per_chunk": "512"
     }
 )
 '''

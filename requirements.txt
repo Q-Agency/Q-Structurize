@@ -3,3 +3,5 @@ uvicorn==0.24.0
 pikepdf==8.7.0
 # Docling standard pipeline (CPU-only) with OCR, layout detection, and table extraction
 docling==2.55.1
+# Transformers for HuggingFace tokenizers (used for custom embedding model tokenization)
+transformers>=4.30.0

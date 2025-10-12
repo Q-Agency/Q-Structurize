@@ -10,6 +10,7 @@ Advanced PDF parsing and structured text extraction API using Docling's Standard
 - **📄 PDF Optimization**: Clean and optimize PDFs for better text extraction using pikepdf
 - **🔄 Structured Output**: Clean markdown format or semantic chunks with rich metadata
 - **🧩 Hybrid Chunking**: Modern chunking with native merge_peers for RAG and semantic search
+- **🎯 Custom Tokenizers**: Match any HuggingFace embedding model's tokenizer for accurate chunking
 - **⚡ Multi-threaded**: Optimized for high-performance CPUs (72-core Xeon 6960P)
 - **⚙️ Configurable Pipeline**: Per-request configuration of OCR, table extraction, threading, and more
 - **🐳 Docker Support**: Ready for containerized deployment
@@ -71,6 +72,7 @@ Parse PDF files using Docling's StandardPdfPipeline with configurable options. S
 - `enable_chunking` (optional, boolean): Enable hybrid chunking for RAG/semantic search (default: false)
 - `max_tokens_per_chunk` (optional, int): Maximum tokens per chunk, 128-2048 (default: 512)
 - `merge_peers` (optional, boolean): Auto-merge undersized chunks with same headings (default: true)
+- `embedding_model` (optional, string): HuggingFace embedding model name for tokenization (e.g., 'sentence-transformers/all-MiniLM-L6-v2'). If not specified, uses HybridChunker's built-in tokenizer
 - `include_markdown` (optional, boolean): Include full markdown when chunking enabled (default: false)
 - `native_serialize` (optional, boolean): Use native Docling serialization via model_dump() (default: false)
 - `pipeline_options` (optional, JSON string): Pipeline configuration options
@@ -231,6 +233,16 @@ curl -X POST "http://localhost:8878/parse/file" \
   -F "enable_chunking=true"
 ```
 
+### Hybrid Chunking with Custom Embedding Model Tokenizer
+```bash
+# Match tokenizer to your embedding model for accurate chunking
+curl -X POST "http://localhost:8878/parse/file" \
+  -F "file=@document.pdf" \
+  -F "enable_chunking=true" \
+  -F "max_tokens_per_chunk=512" \
+  -F "embedding_model=sentence-transformers/all-MiniLM-L6-v2"
+```
+
 ### Hybrid Chunking with Custom Token Limit
 ```bash
 curl -X POST "http://localhost:8878/parse/file" \
@@ -338,6 +350,34 @@ for chunk in result['chunks']:
     print(f"  Pages: {chunk['metadata']['pages']}")
     print(f"  Content type: {chunk['metadata']['content_type']}")
     print(f"  Text preview: {chunk['text'][:100]}...")
+```
+
+### Python Example with Custom Embedding Model Tokenizer
+```python
+import requests
+
+url = "http://localhost:8878/parse/file"
+files = {"file": open("document.pdf", "rb")}
+
+# Match tokenizer to your embedding model for accurate chunking
+data = {
+    "enable_chunking": True,
+    "max_tokens_per_chunk": 512,
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",  # Match your embedding model
+    "merge_peers": True
+}
+
+response = requests.post(url, files=files, data=data)
+result = response.json()
+
+print(f"Status: {result['status']}")
+print(f"Total chunks: {result['total_chunks']}")
+
+# Process chunks - tokens are counted using the same tokenizer as your embedding model
+for chunk in result['chunks']:
+    print(f"\nChunk {chunk['chunk_index']}:")
+    print(f"  Text: {chunk['text'][:100]}...")
+    # Now you can safely embed this chunk without token overflow
 ```
 
 ### Python Example with Native Serialization (Full Metadata)
@@ -453,8 +493,26 @@ Example: `"ocr_languages": ["en", "es"]` for English and Spanish
 | `enable_chunking` | false | boolean | Enable hybrid chunking mode |
 | `max_tokens_per_chunk` | 512 | 128-2048 | Maximum tokens per chunk |
 | `merge_peers` | true | boolean | Auto-merge undersized successive chunks with same headings |
+| `embedding_model` | None | string | HuggingFace embedding model name for tokenization (see below) |
 | `include_markdown` | false | boolean | Include full markdown alongside chunks |
 | `native_serialize` | false | boolean | Use native Docling serialization (model_dump) for maximum metadata |
+
+**Custom Embedding Model Tokenizers:**
+
+You can specify any HuggingFace embedding model to match your tokenizer for accurate token counting:
+
+| Model | Use Case | Max Tokens |
+|-------|----------|------------|
+| `sentence-transformers/all-MiniLM-L6-v2` | General purpose, fast, English | 256 |
+| `BAAI/bge-small-en-v1.5` | High quality, English | 512 |
+| `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Multilingual support | 128 |
+| `intfloat/e5-small-v2` | Balanced quality/speed | 512 |
+
+**Benefits:**
+- ✅ **Accurate Token Counting**: Matches your embedding model's tokenizer exactly
+- ✅ **No Token Overflow**: Ensures chunks fit within your model's context window
+- ✅ **Multilingual Support**: Use tokenizers optimized for your language
+- ✅ **Caching**: Tokenizers are cached in memory for fast subsequent requests
 
 **Chunk Metadata:**
 Each chunk includes rich metadata:

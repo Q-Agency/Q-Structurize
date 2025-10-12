@@ -60,12 +60,18 @@ def _create_chunker(
     # Only pass tokenizer if explicitly provided
     if tokenizer is not None:
         chunker_params["tokenizer"] = tokenizer
-        logger.info("Using provided tokenizer")
+        # Try to get tokenizer info for logging
+        tokenizer_info = "custom tokenizer"
+        if hasattr(tokenizer, 'name_or_path'):
+            tokenizer_info = f"custom tokenizer (model: {tokenizer.name_or_path})"
+        elif hasattr(tokenizer, '__class__'):
+            tokenizer_info = f"custom tokenizer (type: {tokenizer.__class__.__name__})"
+        logger.info(f"Using {tokenizer_info}")
     else:
         logger.info("Using HybridChunker's built-in tokenizer")
     
     chunker = HybridChunker(**chunker_params)
-    logger.debug(f"HybridChunker initialized with params: {chunker_params}")
+    logger.debug(f"HybridChunker initialized with max_tokens={max_tokens}, merge_peers={merge_peers}")
     
     return chunker
 
