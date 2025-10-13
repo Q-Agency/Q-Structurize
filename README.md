@@ -72,7 +72,7 @@ Parse PDF files using Docling's StandardPdfPipeline with configurable options. S
 - `enable_chunking` (optional, boolean): Enable hybrid chunking for RAG/semantic search (default: false)
 - `max_tokens_per_chunk` (optional, int): Maximum tokens per chunk, 128-2048 (default: 512)
 - `merge_peers` (optional, boolean): Auto-merge undersized chunks with same headings (default: true)
-- `embedding_model` (optional, string): HuggingFace embedding model name for tokenization (e.g., 'sentence-transformers/all-MiniLM-L6-v2'). If not specified, uses HybridChunker's built-in tokenizer
+- `embedding_model` (optional, string): HuggingFace embedding model name to use its tokenizer for accurate chunking (e.g., 'nomic-ai/nomic-embed-text-v1.5'). **Only loads the tokenizer (~2MB), not the full model**. Match this to your actual embedding model to ensure chunks fit perfectly. If not specified, uses HybridChunker's built-in tokenizer
 - `include_markdown` (optional, boolean): Include full markdown when chunking enabled (default: false)
 - `native_serialize` (optional, boolean): Use native Docling serialization via model_dump() (default: false)
 - `pipeline_options` (optional, JSON string): Pipeline configuration options
@@ -236,11 +236,12 @@ curl -X POST "http://localhost:8878/parse/file" \
 ### Hybrid Chunking with Custom Embedding Model Tokenizer
 ```bash
 # Match tokenizer to your embedding model for accurate chunking
+# Example: Using nomic-embed-text (loads only tokenizer, ~2MB)
 curl -X POST "http://localhost:8878/parse/file" \
   -F "file=@document.pdf" \
   -F "enable_chunking=true" \
   -F "max_tokens_per_chunk=512" \
-  -F "embedding_model=sentence-transformers/all-MiniLM-L6-v2"
+  -F "embedding_model=nomic-ai/nomic-embed-text-v1.5"
 ```
 
 ### Hybrid Chunking with Custom Token Limit
@@ -499,20 +500,43 @@ Example: `"ocr_languages": ["en", "es"]` for English and Spanish
 
 **Custom Embedding Model Tokenizers:**
 
-You can specify any HuggingFace embedding model to match your tokenizer for accurate token counting:
+You can specify any HuggingFace embedding model name to use its tokenizer for accurate token counting during chunking.
 
-| Model | Use Case | Max Tokens |
-|-------|----------|------------|
-| `sentence-transformers/all-MiniLM-L6-v2` | General purpose, fast, English | 256 |
-| `BAAI/bge-small-en-v1.5` | High quality, English | 512 |
-| `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Multilingual support | 128 |
-| `intfloat/e5-small-v2` | Balanced quality/speed | 512 |
+**⚠️ Important**: We only load the **tokenizer** (~2MB), not the full embedding model (hundreds of MB). The tokenizer is used solely to count tokens the same way your embedding model will count them when you embed the chunks later.
+
+**Why Specify the Model Name?**
+
+Different embedding models use different tokenizers that split text differently:
+- Same text chunked with different tokenizers = different token counts
+- If your chunks are "500 tokens" using a generic tokenizer, they might be "650 tokens" in your embedding model
+- This causes truncation or errors when you try to embed those chunks
+
+**Solution**: Match the tokenizer to your embedding model:
+```bash
+# If you use nomic-embed-text (via Ollama or API), use its tokenizer for chunking:
+embedding_model=nomic-ai/nomic-embed-text-v1.5
+
+# If you use BGE for embeddings, use its tokenizer:
+embedding_model=BAAI/bge-small-en-v1.5
+```
+
+**Popular Models:**
+
+| Model Name | Use Case | Context Window | Downloads |
+|------------|----------|----------------|-----------|
+| `nomic-ai/nomic-embed-text-v1.5` | High performance, long context | 8192 tokens | Tokenizer only (~2MB) |
+| `BAAI/bge-small-en-v1.5` | High quality, English | 512 tokens | Tokenizer only (~2MB) |
+| `sentence-transformers/all-MiniLM-L6-v2` | General purpose, fast | 256 tokens | Tokenizer only (~2MB) |
+| `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Multilingual | 128 tokens | Tokenizer only (~2MB) |
+| `intfloat/e5-small-v2` | Balanced quality/speed | 512 tokens | Tokenizer only (~2MB) |
 
 **Benefits:**
-- ✅ **Accurate Token Counting**: Matches your embedding model's tokenizer exactly
-- ✅ **No Token Overflow**: Ensures chunks fit within your model's context window
-- ✅ **Multilingual Support**: Use tokenizers optimized for your language
-- ✅ **Caching**: Tokenizers are cached in memory for fast subsequent requests
+- ✅ **Accurate Token Counting**: Counts tokens exactly as your embedding model will
+- ✅ **No Token Overflow**: Ensures chunks fit perfectly in your model's context window
+- ✅ **Consistent Pipeline**: Same tokenizer in chunking → same tokenizer in embedding
+- ✅ **Lightweight**: Only downloads tokenizer (~2MB), not full model weights (500MB+)
+- ✅ **Fast**: Tokenizers are cached in memory for instant subsequent requests
+- ✅ **Any HuggingFace Model**: Works with any embedding model on HuggingFace Hub
 
 **Chunk Metadata:**
 Each chunk includes rich metadata:
