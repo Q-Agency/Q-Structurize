@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import logging
 from app.services.pdf_optimizer import PDFOptimizer
 from app.services.docling_parser import DoclingParser
+from app.services.vlm_parser import VlmParser
 from app.services import hybrid_chunker
 from app.services.tokenizer_manager import get_tokenizer_manager
 from app.models.schemas import ParseResponse, ChunkData, ChunkMetadata, ChunkingData
@@ -27,12 +28,13 @@ logging.getLogger('docling.pipeline').setLevel(logging.DEBUG)
 # Initialize services
 pdf_optimizer = PDFOptimizer()
 docling_parser = DoclingParser()
+vlm_parser = VlmParser()
 
 
 app = FastAPI(
     title="Q-Structurize",
-    description="Advanced PDF parsing and structured text extraction API using Docling StandardPdfPipeline with ThreadedPdfPipelineOptions for batching and backpressure control. Features include layout analysis, hybrid chunking for RAG with custom HuggingFace tokenizers, optional OCR with multi-language support, configurable table extraction, batched processing, and multi-threaded processing optimized for 2x 72-core Xeon 6960P (144 cores).",
-    version="2.4.0",
+    description="Advanced PDF parsing and structured text extraction API using Docling StandardPdfPipeline with ThreadedPdfPipelineOptions for batching and backpressure control. Features include VLM parsing with Vision-Language Models, layout analysis, hybrid chunking for RAG with custom HuggingFace tokenizers, optional OCR with multi-language support, configurable table extraction, batched processing, and multi-threaded processing optimized for 2x 72-core Xeon 6960P (144 cores).",
+    version="2.5.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -64,6 +66,7 @@ app = FastAPI(
 async def parse_pdf_file(
     file: UploadFile = File(..., description="PDF file to parse", media_type="application/pdf"),
     optimize_pdf: bool = Form(True, description="Whether to optimize PDF for better text extraction"),
+    use_vlm: bool = Form(False, description="Use VLM (Vision Language Model) for end-to-end PDF parsing. Note: Chunking is not supported with VLM."),
     enable_chunking: bool = Form(False, description="Enable hybrid chunking for RAG and semantic search"),
     max_tokens_per_chunk: int = Form(512, ge=128, le=2048, description="Maximum tokens per chunk (128-2048)"),
     merge_peers: bool = Form(True, description="Merge undersized successive chunks with same headings"),
@@ -74,6 +77,13 @@ async def parse_pdf_file(
     # Validate file type
     if not file.content_type or not file.content_type.startswith('application/pdf'):
         raise HTTPException(status_code=415, detail="File must be a PDF")
+    
+    # Validate VLM and chunking are not both enabled
+    if use_vlm and enable_chunking:
+        raise HTTPException(
+            status_code=400, 
+            detail="VLM parsing and chunking cannot be used together. VLM returns full markdown only."
+        )
     
     try:
         # ========================================
@@ -96,8 +106,34 @@ async def parse_pdf_file(
                            f"Reduction: {size_info['size_reduction_percentage']}%")
         
         # ========================================
-        # STEP 3: PDF PARSING WITH DOCLING BATCHED PROCESSING
+        # STEP 3: PDF PARSING - VLM OR STANDARD DOCLING
         # ========================================
+        
+        # Branch: VLM parsing (end-to-end with Vision-Language Model)
+        if use_vlm:
+            if not vlm_parser.is_available():
+                raise HTTPException(
+                    status_code=503,
+                    detail="VLM parser is not available. Please check dependencies and remote service connection."
+                )
+            
+            logger.info("Starting PDF parsing with VLM (Vision Language Model)...")
+            parse_result = vlm_parser.parse_pdf(pdf_content)
+            
+            if not parse_result["success"]:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"VLM parsing failed: {parse_result['error']}"
+                )
+            
+            # Return successful VLM parsing result
+            return ParseResponse(
+                message="PDF parsed successfully using VLM",
+                status="success",
+                content=parse_result["content"]
+            )
+        
+        # Standard Docling parsing with batched processing
         if not docling_parser.is_available():
             raise HTTPException(
                 status_code=503, 
@@ -193,6 +229,7 @@ async def root():
         "features": [
             "PDF optimization",
             "Pre-initialized Docling converter for instant processing",
+            "VLM parsing for end-to-end PDF processing with Vision-Language Models",
             "Layout analysis and document structure extraction",
             "Hybrid chunking with native merge_peers for RAG",
             "Custom embedding model tokenizers (any HuggingFace model)",
@@ -201,7 +238,7 @@ async def root():
             "Multi-threaded processing (optimized for 2x 72-core Xeon 6960P)",
             "Structured markdown or semantic chunks output"
         ],
-        "version": "2.4.0",
+        "version": "2.5.0",
         "endpoints": {
             "parse": "/parse/file - Parse PDF with configurable options",
             "parser_info": "/parsers/info - Get parser capabilities",
