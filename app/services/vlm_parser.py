@@ -140,6 +140,10 @@ class VlmParser:
             params=dict(
                 model=config['vlm_model'],
                 max_tokens=config['vlm_max_tokens'],
+                top_p=0.95,
+                frequency_penalty=0.2,
+                presence_penalty=0.2,
+                stop=["<|end_of_text|>", "</document>", "\n\n\n\n"],
             ),
             headers=headers,
             prompt=config['vlm_prompt'],
