@@ -83,10 +83,10 @@ ENV LOG_LEVEL=DEBUG \
     DOCLING_VLM_MODEL=ibm-granite/granite-docling-258M \
     DOCLING_VLM_API_KEY=blabla \
     DOCLING_VLM_TIMEOUT=90 \
-    DOCLING_VLM_TEMPERATURE=0.1 \
+    DOCLING_VLM_TEMPERATURE=0.0 \
     DOCLING_VLM_MAX_TOKENS=9096 \
     DOCLING_VLM_SCALE=2.0 \
-    DOCLING_VLM_PROMPT="Convert this page to docling."
+    DOCLING_VLM_PROMPT="OCR the full page to markdown. Preserve all text, tables, and formatting."
 
 # Finally copy app sources (changes here don't invalidate pip layer)
 COPY . .
