@@ -15,7 +15,6 @@ try:
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.pipeline.vlm_pipeline import VlmPipeline
-    from docling.datamodel.pipeline_options import VlmPipelineOptions
     from docling.datamodel.settings import settings
     VLM_AVAILABLE = True
 except ImportError as e:
@@ -63,22 +62,21 @@ class VlmParser:
         
         try:
             # Force explicit GraniteDocling HF model (avoid cache-root ambiguity)
-            from docling.datamodel.pipeline_options import VlmPipelineOptions
+            # from docling.datamodel.pipeline_options import VlmPipelineOptions
 
-            model_id = os.getenv("DOCLING_VLM_MODEL", "ibm-granite/granite-docling-258M")
-            logger.info(f"🔧 Using explicit VLM model_id = {model_id}")
+            # model_id = os.getenv("DOCLING_VLM_MODEL", "ibm-granite/granite-docling-258M")
+            # logger.info(f"🔧 Using explicit VLM model_id = {model_id}")
 
-            pipeline_options = VlmPipelineOptions(
-                vlm_options={"repo_id": model_id},   # per docs: HF model repo
-                device=os.getenv("DOCLING_ACCELERATOR_DEVICE", "cuda"),
-                trust_remote_code=True,
-            )
+            # pipeline_options = VlmPipelineOptions(
+            #     vlm_options={"repo_id": model_id},   # per docs: HF model repo
+            #     device=os.getenv("DOCLING_ACCELERATOR_DEVICE", "cuda"),
+            #     trust_remote_code=True,
+            # )
 
             self.converter = DocumentConverter(
                 format_options={
                     InputFormat.PDF: PdfFormatOption(
-                        pipeline_cls=VlmPipeline,
-                        pipeline_options=pipeline_options,
+                        pipeline_cls=VlmPipeline
                     ),
                 }
             )
