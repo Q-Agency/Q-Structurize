@@ -56,7 +56,8 @@ try:
     from docling.datamodel.pipeline_options_vlm_model import (
         InlineVlmOptions, 
         InferenceFramework, 
-        TransformersModelType
+        TransformersModelType,
+        ResponseFormat
     )
     from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
     VLM_AVAILABLE = True
@@ -71,6 +72,7 @@ except ImportError as e:
     InlineVlmOptions = None
     InferenceFramework = None
     TransformersModelType = None
+    ResponseFormat = None
     AcceleratorOptions = None
     AcceleratorDevice = None
     logger.error(f"Failed to import docling VLM components: {e}")
@@ -137,6 +139,7 @@ class VlmParser:
             vlm_pipeline_options.vlm_options = InlineVlmOptions(
                 repo_id=model_path,
                 prompt="Convert this page to markdown. Do not miss any text and only output the bare markdown!",
+                response_format=ResponseFormat.MARKDOWN,  # Required field
                 inference_framework=InferenceFramework.TRANSFORMERS,
                 transformers_model_type=TransformersModelType.AUTOMODEL_VISION2SEQ,
                 supported_devices=[device],  # Force our selected device
