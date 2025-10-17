@@ -78,6 +78,16 @@ class VlmParser:
             logger.info(f"   🎯 Backend: Transformers")
             logger.info(f"   🧵 Threads: {num_threads} (OMP_NUM_THREADS)")
             
+            # Explicitly ensure HuggingFace cache is used, not Docling artifacts
+            hf_cache = os.getenv("HF_HOME", "/app/.cache/huggingface")
+            logger.info(f"   📁 HF Cache: {hf_cache}")
+            
+            # Temporarily unset DOCLING_ARTIFACTS_PATH to prevent interference
+            docling_artifacts_backup = os.getenv("DOCLING_ARTIFACTS_PATH")
+            if docling_artifacts_backup:
+                logger.info(f"   ⚠️  Temporarily ignoring DOCLING_ARTIFACTS_PATH for VLM model loading")
+                # Don't unset, just don't use it - VLM needs HF cache
+            
             # Choose device from environment
             device_env = os.getenv("DOCLING_ACCELERATOR_DEVICE", "cuda").lower()
             device = (
@@ -108,14 +118,11 @@ class VlmParser:
             # Set device explicitly on accelerator options
             pipeline_options.accelerator_options.device = device
             
-            # DO NOT set artifacts_path for VLM - let it use HuggingFace cache
-            # VLM models need to load from HF_HOME, not DOCLING_ARTIFACTS_PATH
-            # artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
-            # if artifacts_dir:
-            #     pipeline_options.artifacts_path = artifacts_dir
-            
-            logger.info(f"   📁 HF Cache: {os.getenv('HF_HOME', '/app/.cache/huggingface')}")
-            logger.info(f"   🔄 Will download from HuggingFace Hub on first run")
+            # Explicitly set artifacts_path to None to force HuggingFace cache usage
+            # This prevents docling from looking in DOCLING_ARTIFACTS_PATH
+            pipeline_options.artifacts_path = None
+            logger.info(f"   🚫 artifacts_path explicitly set to None (using HF cache only)")
+            logger.info(f"   🔄 Model will download from HuggingFace Hub: {model_id}")
             
             # Build the converter with explicit VLM configuration
             self.converter = DocumentConverter(

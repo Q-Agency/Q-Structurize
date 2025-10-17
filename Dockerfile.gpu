@@ -11,6 +11,7 @@ ENV PYTHONUNBUFFERED=1 \
     HF_HOME=/app/.cache/huggingface \
     TRANSFORMERS_CACHE=/app/.cache/huggingface \
     HUGGINGFACE_HUB_CACHE=/app/.cache/huggingface \
+    HF_DATASETS_CACHE=/app/.cache/huggingface \
     PATH="/usr/local/bin:${PATH}"
 
 # Install Python 3.11 and system dependencies
