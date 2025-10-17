@@ -108,10 +108,14 @@ class VlmParser:
             # Set device explicitly on accelerator options
             pipeline_options.accelerator_options.device = device
             
-            # Optional: Set artifacts path if provided
-            artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
-            if artifacts_dir:
-                pipeline_options.artifacts_path = artifacts_dir
+            # DO NOT set artifacts_path for VLM - let it use HuggingFace cache
+            # VLM models need to load from HF_HOME, not DOCLING_ARTIFACTS_PATH
+            # artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
+            # if artifacts_dir:
+            #     pipeline_options.artifacts_path = artifacts_dir
+            
+            logger.info(f"   📁 HF Cache: {os.getenv('HF_HOME', '/app/.cache/huggingface')}")
+            logger.info(f"   🔄 Will download from HuggingFace Hub on first run")
             
             # Build the converter with explicit VLM configuration
             self.converter = DocumentConverter(
