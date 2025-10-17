@@ -162,6 +162,41 @@ PIPELINE_OPTIONS_CONFIG = {
             }
         }
     },
+    "vlm_options": {
+        "description": "Vision Language Model (VLM) parsing options for end-to-end document understanding",
+        "use_vlm": {
+            "type": "boolean",
+            "default": False,
+            "description": "Enable VLM (Vision Language Model) parsing using Granite Docling",
+            "notes": "VLM uses vision-based AI for document parsing. Effective for complex layouts, images, and mixed content. Does NOT support chunking or PDF optimization.",
+            "model": "ibm-granite/granite-docling-258M (configurable via ENV)",
+            "use_cases": [
+                "Documents with complex layouts",
+                "Image-heavy documents",
+                "Mixed content with figures and diagrams",
+                "Scanned documents with visual structure",
+                "Documents where standard parsing struggles"
+            ],
+            "limitations": [
+                "No chunking support (use standard parser for RAG chunking)",
+                "No PDF optimization support",
+                "Ignores embedding_model parameter",
+                "May be slower than standard pipeline for simple documents",
+                "Requires VLM model download on first use (~258MB for Granite Docling)"
+            ],
+            "performance": {
+                "initialization": "One-time at startup (30-60 seconds for model download/load)",
+                "inference": "Fast with pre-loaded model",
+                "throughput": "Generally slower than standard pipeline but better quality for complex layouts"
+            }
+        },
+        "configuration": {
+            "env_variable": "DOCLING_VLM_MODEL",
+            "default_model": "ibm-granite/granite-docling-258M",
+            "description": "Configure VLM model via Dockerfile ENV variable",
+            "notes": "Change model by setting ENV variable and rebuilding container"
+        }
+    },
     "example_configurations": {
         "default": {
             "description": "Default configuration - fast, no OCR",
@@ -280,6 +315,13 @@ PIPELINE_OPTIONS_CONFIG = {
                 "batch_timeout_seconds": 3.0,
                 "table_mode": "fast"
             }
+        },
+        "vlm_parsing": {
+            "description": "VLM (Vision Language Model) for complex layouts and images",
+            "config": {
+                "use_vlm": True
+            },
+            "notes": "VLM ignores other options like optimize_pdf, enable_chunking, etc. Best for visually complex documents."
         }
     },
     "chunking_options": {
@@ -370,6 +412,10 @@ PIPELINE_OPTIONS_CONFIG = {
   -F "embedding_model=BAAI/bge-small-en-v1.5" \\
   -F "include_full_metadata=true"
 ''',
+        "example_curl_vlm": '''curl -X POST "http://localhost:8000/parse/file" \\
+  -F "file=@document.pdf" \\
+  -F "use_vlm=true"
+''',
         "example_python": '''import requests
 
 response = requests.post(
@@ -405,6 +451,20 @@ response = requests.post(
         "max_tokens_per_chunk": "512"
     }
 )
+''',
+        "example_python_vlm": '''import requests
+
+# VLM parsing for complex layouts
+response = requests.post(
+    "http://localhost:8000/parse/file",
+    files={"file": open("document.pdf", "rb")},
+    data={
+        "use_vlm": "true"
+    }
+)
+
+result = response.json()
+print(result["content"])  # Markdown output from VLM
 '''
     }
 }
