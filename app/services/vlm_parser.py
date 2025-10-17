@@ -140,22 +140,10 @@ class VlmParser:
             
             # Configure model loading parameters if supported by VlmPipeline
             if hasattr(pipeline_options, 'model_kwargs'):
-                model_kwargs = {
+                pipeline_options.model_kwargs = {
                     'torch_dtype': torch_dtype,
                     'device_map': 'cuda:0' if device == AcceleratorDevice.CUDA else 'auto'
                 }
-                
-                # Try to enable Flash Attention 2 if available (2-3x speedup on attention)
-                use_flash_attn = os.environ.get('DOCLING_USE_FLASH_ATTENTION', '1') == '1'
-                if use_flash_attn:
-                    try:
-                        import flash_attn
-                        model_kwargs['attn_implementation'] = 'flash_attention_2'
-                        logger.info(f"⚡ Flash Attention 2 enabled (flash-attn {flash_attn.__version__})")
-                    except ImportError:
-                        logger.info(f"⚡ Flash Attention not available - using default attention")
-                
-                pipeline_options.model_kwargs = model_kwargs
                 logger.info(f"✅ Model dtype configured: {torch_dtype}")
             else:
                 # Set as environment variable for transformers to pick up
