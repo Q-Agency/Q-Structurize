@@ -2,7 +2,7 @@ fastapi[standard]==0.118.0
 uvicorn==0.24.0
 pikepdf==8.7.0
 # Docling standard pipeline (CPU-only) with OCR, layout detection, table extraction, and VLM support
-docling[vlm]==2.57.0
+docling==2.57.0
 docling-core[chunking]==2.49.0
 # Match docling[vlm] constraints
 transformers==4.46.3
