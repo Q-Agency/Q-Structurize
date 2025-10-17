@@ -16,6 +16,13 @@ try:
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.pipeline.vlm_pipeline import VlmPipeline
     from docling.datamodel.pipeline_options import VlmPipelineOptions
+    from docling.datamodel.pipeline_options_vlm_model import (
+        InlineVlmOptions,
+        InferenceFramework,
+        ResponseFormat,
+        TransformersModelType,
+    )
+    from docling.datamodel.accelerator_options import AcceleratorDevice
     from docling.datamodel.settings import settings
     VLM_AVAILABLE = True
 except ImportError as e:
@@ -24,6 +31,12 @@ except ImportError as e:
     DocumentConverter = None
     PdfFormatOption = None
     VlmPipeline = None
+    VlmPipelineOptions = None
+    InlineVlmOptions = None
+    InferenceFramework = None
+    ResponseFormat = None
+    TransformersModelType = None
+    AcceleratorDevice = None
     settings = None
     logger.error(f"Failed to import docling VLM components: {e}")
 
@@ -55,25 +68,52 @@ class VlmParser:
         logger.info("============================================================")
         logger.info("🚀 Initializing VLM DocumentConverter (ONE-TIME SETUP)")
         logger.info("⚙️  Configuration:")
-        logger.info(f"   🤖 Model: GraniteDocling (default)")
-        logger.info(f"   🎯 Backend: Transformers (CUDA)")
-        logger.info(f"   🧵 Threads: {num_threads} (OMP_NUM_THREADS)")
         
         init_start = time.time()
         
         try:
-            # Force explicit GraniteDocling HF model (avoid cache-root ambiguity)
-            from docling.datamodel.pipeline_options import VlmPipelineOptions
-
+            # Get model ID from environment
             model_id = os.getenv("DOCLING_VLM_MODEL", "ibm-granite/granite-docling-258M")
-            logger.info(f"🔧 Using explicit VLM model_id = {model_id}")
-
-            pipeline_options = VlmPipelineOptions(
-                vlm_options={"repo_id": model_id},   # per docs: HF model repo
-                device=os.getenv("DOCLING_ACCELERATOR_DEVICE", "cuda"),
-                trust_remote_code=True,
+            logger.info(f"   🤖 Model: {model_id}")
+            logger.info(f"   🎯 Backend: Transformers")
+            logger.info(f"   🧵 Threads: {num_threads} (OMP_NUM_THREADS)")
+            
+            # Choose device from environment
+            device_env = os.getenv("DOCLING_ACCELERATOR_DEVICE", "cuda").lower()
+            device = (
+                AcceleratorDevice.CUDA
+                if device_env.startswith("cuda")
+                else AcceleratorDevice.CPU
             )
-
+            logger.info(f"   🚀 Device: {device}")
+            
+            # Create properly-typed InlineVlmOptions (REQUIRED by Pydantic)
+            vlm_options = InlineVlmOptions(
+                repo_id=model_id,
+                prompt="Convert this page to docling.",  # Required field: instruction for VLM
+                response_format=ResponseFormat.DOCTAGS,  # Required: Granite outputs DocTags format
+                inference_framework=InferenceFramework.TRANSFORMERS,  # Required: using transformers backend
+                transformers_model_type=TransformersModelType.AUTOMODEL_IMAGETEXTTOTEXT,  # Vision-text model type
+                temperature=0.0,  # Deterministic output
+                scale=2.0,  # Image scaling factor
+                trust_remote_code=True,  # Required for some HuggingFace models
+            )
+            
+            # Create VlmPipelineOptions with the typed object
+            pipeline_options = VlmPipelineOptions(
+                vlm_options=vlm_options,  # ✅ Properly typed InlineVlmOptions object
+                enable_remote_services=False,  # Local inference, not API call
+            )
+            
+            # Set device explicitly on accelerator options
+            pipeline_options.accelerator_options.device = device
+            
+            # Optional: Set artifacts path if provided
+            artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
+            if artifacts_dir:
+                pipeline_options.artifacts_path = artifacts_dir
+            
+            # Build the converter with explicit VLM configuration
             self.converter = DocumentConverter(
                 format_options={
                     InputFormat.PDF: PdfFormatOption(
@@ -83,8 +123,8 @@ class VlmParser:
                 }
             )
 
-            # Pre-initialize pipeline (loads GraniteDocling into VRAM)
-            logger.info("📦 Pre-loading GraniteDocling VLM model from HF...")
+            # Pre-initialize pipeline (loads Granite-Docling into memory/VRAM)
+            logger.info("📦 Pre-loading Granite-Docling VLM model from HuggingFace...")
             self.converter.initialize_pipeline(InputFormat.PDF)
             
             init_time = time.time() - init_start
@@ -201,11 +241,19 @@ class VlmParser:
         return {
             "available": self.is_available(),
             "library": "docling" if VLM_AVAILABLE else None,
-            "pipeline": "VlmPipeline (default GraniteDocling)",
-            "description": "Vision Language Model for end-to-end PDF parsing",
+            "pipeline": "VlmPipeline with Granite-Docling",
+            "description": "Vision Language Model for end-to-end PDF parsing using Granite Docling",
             "performance_mode": "optimized_with_preinitialization",
-            "model": "GraniteDocling (ibm-granite/granite-docling-258M)",
-            "backend": "Transformers (CUDA)",
+            "model": os.getenv("DOCLING_VLM_MODEL", "ibm-granite/granite-docling-258M"),
+            "backend": "Transformers (CUDA/CPU)",
+            "configuration": {
+                "prompt": "Convert this page to docling.",
+                "response_format": "DOCTAGS",
+                "inference_framework": "TRANSFORMERS",
+                "transformers_model_type": "AUTOMODEL_IMAGETEXTTOTEXT",
+                "temperature": 0.0,
+                "scale": 2.0
+            },
             "features": {
                 "vision_based": True,
                 "complex_layouts": True,
@@ -214,7 +262,7 @@ class VlmParser:
                 "optimization_support": False
             },
             "performance": {
-                "initialization": "One-time at startup",
+                "initialization": "One-time at startup (downloads model from HuggingFace on first run)",
                 "per_request": "Fast inference with pre-loaded model",
             }
         }
