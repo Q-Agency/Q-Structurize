@@ -280,27 +280,6 @@ PIPELINE_OPTIONS_CONFIG = {
                 "batch_timeout_seconds": 3.0,
                 "table_mode": "fast"
             }
-        },
-        "vlm_parsing": {
-            "description": "End-to-end parsing with Vision-Language Model",
-            "config": {
-                "use_vlm": True
-            },
-            "notes": "Requires remote VLM service. Configure via environment variables."
-        }
-    },
-    "vlm_options": {
-        "use_vlm": {
-            "type": "boolean",
-            "default": False,
-            "description": "Use VLM (Vision Language Model) for end-to-end PDF parsing",
-            "notes": "⚠️ When enabled, chunking is not supported. Returns full markdown only. Requires remote VLM service to be running.",
-            "use_cases": [
-                "Complex document layouts that standard parsers struggle with",
-                "Documents with mixed content (text, images, tables)",
-                "When you need AI-powered document understanding"
-            ],
-            "configuration": "Set via environment variables in Dockerfile: DOCLING_VLM_URL, DOCLING_VLM_MODEL, DOCLING_VLM_API_KEY"
         }
     },
     "chunking_options": {
@@ -308,7 +287,7 @@ PIPELINE_OPTIONS_CONFIG = {
             "type": "boolean",
             "default": False,
             "description": "Enable hybrid chunking for RAG and semantic search",
-            "notes": "When enabled, returns structured chunks instead of full markdown. ⚠️ Cannot be used with use_vlm=true"
+            "notes": "When enabled, returns structured chunks instead of full markdown"
         },
         "max_tokens_per_chunk": {
             "type": "integer",
@@ -424,22 +403,6 @@ response = requests.post(
     data={
         "enable_chunking": "true",
         "max_tokens_per_chunk": "512"
-    }
-)
-''',
-        "example_curl_vlm": '''curl -X POST "http://localhost:8000/parse/file" \\
-  -F "file=@document.pdf" \\
-  -F "use_vlm=true"
-''',
-        "example_python_vlm": '''import requests
-
-# VLM parsing with optimization
-response = requests.post(
-    "http://localhost:8000/parse/file",
-    files={"file": open("document.pdf", "rb")},
-    data={
-        "use_vlm": "true",
-        "optimize_pdf": "true"
     }
 )
 '''

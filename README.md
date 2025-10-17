@@ -9,7 +9,6 @@ Advanced PDF parsing and structured text extraction API using Docling's Standard
 - **📐 Layout Analysis**: Document structure understanding using DocLayNet model
 - **📊 Table Extraction**: Configurable FAST or ACCURATE table structure preservation using TableFormer
 - **🔍 OCR Support**: Optional multi-language text extraction from images and scanned documents using EasyOCR
-- **🤖 VLM Parsing**: End-to-end PDF parsing using Vision-Language Models (Granite Docling via vLLM)
 - **📄 PDF Optimization**: Clean and optimize PDFs for better text extraction using pikepdf
 - **🔄 Structured Output**: Clean markdown format or semantic chunks with rich metadata
 - **🧩 Hybrid Chunking**: Modern chunking with native merge_peers for RAG and semantic search
@@ -73,8 +72,7 @@ Parse PDF files using Docling's StandardPdfPipeline with configurable options. S
 **Parameters:**
 - `file` (required): PDF file upload
 - `optimize_pdf` (optional, boolean): Whether to optimize PDF for better text extraction (default: true)
-- `use_vlm` (optional, boolean): Use VLM (Vision Language Model) for end-to-end PDF parsing (default: false). **Note**: Cannot be used with chunking. Returns full markdown only.
-- `enable_chunking` (optional, boolean): Enable hybrid chunking for RAG/semantic search (default: false). **Note**: Cannot be used with VLM parsing.
+- `enable_chunking` (optional, boolean): Enable hybrid chunking for RAG/semantic search (default: false)
 - `max_tokens_per_chunk` (optional, int): Maximum tokens per chunk, 128-2048 (default: 512)
 - `merge_peers` (optional, boolean): Auto-merge undersized chunks with same headings (default: true)
 - `embedding_model` (optional, string): HuggingFace embedding model name to use its tokenizer for accurate chunking (e.g., 'nomic-ai/nomic-embed-text-v1.5'). **Only loads the tokenizer (~2MB), not the full model**. Match this to your actual embedding model to ensure chunks fit perfectly. If not specified, uses HybridChunker's built-in tokenizer
@@ -231,32 +229,6 @@ curl -X POST "http://localhost:8878/parse/file" \
   -F "file=@document.pdf" \
   -F "optimize_pdf=true"
 ```
-
-### VLM Parsing (Vision Language Model)
-```bash
-# End-to-end parsing with VLM (Granite Docling via vLLM)
-curl -X POST "http://localhost:8878/parse/file" \
-  -F "file=@document.pdf" \
-  -F "use_vlm=true"
-```
-
-**VLM Configuration** (via Dockerfile environment variables):
-```dockerfile
-DOCLING_VLM_URL=http://192.168.20.74:8004/v1/chat/completions
-DOCLING_VLM_MODEL=ibm-granite/granite-docling-258M
-DOCLING_VLM_API_KEY=your-api-key
-DOCLING_VLM_TIMEOUT=90
-DOCLING_VLM_TEMPERATURE=0.7
-DOCLING_VLM_MAX_TOKENS=4096
-DOCLING_VLM_SCALE=2.0
-DOCLING_VLM_PROMPT="Convert this page to docling."
-```
-
-**VLM Notes:**
-- Requires remote VLM service (e.g., vLLM serving Granite Docling)
-- Returns full markdown only (chunking not supported)
-- Best for complex layouts and mixed content
-- Configure remote service URL via environment variables
 
 ### Parse Scanned PDF with OCR
 ```bash

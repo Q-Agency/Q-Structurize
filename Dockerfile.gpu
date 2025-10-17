@@ -77,16 +77,7 @@ ENV LOG_LEVEL=DEBUG \
     DOCLING_PAGE_BATCH_SIZE=16 \
     DOCLING_QUEUE_MAX_SIZE=2000 \
     DOCLING_BATCH_TIMEOUT=0.5 \
-    DOCLING_ACCELERATOR_DEVICE=cuda \
-    DOCLING_VLM_ENABLED=false \
-    DOCLING_VLM_URL=http://192.168.20.74:8004/v1/chat/completions \
-    DOCLING_VLM_MODEL=ibm-granite/granite-docling-258M \
-    DOCLING_VLM_API_KEY=blabla \
-    DOCLING_VLM_TIMEOUT=90 \
-    DOCLING_VLM_TEMPERATURE=0.0 \
-    DOCLING_VLM_MAX_TOKENS=9096 \
-    DOCLING_VLM_SCALE=2.0 \
-    DOCLING_VLM_PROMPT="OCR the full page to markdown. Preserve all text, tables, and formatting."
+    DOCLING_ACCELERATOR_DEVICE=cuda
 
 # Finally copy app sources (changes here don't invalidate pip layer)
 COPY . .
