@@ -1,9 +1,5 @@
 """
 VLM (Vision Language Model) parser service for end-to-end PDF parsing.
-
-This module provides VLM-based PDF parsing using Docling's VlmPipeline with
-the Granite Docling VLM model. The converter is pre-initialized at startup
-for optimal performance.
 """
 
 import os
@@ -16,21 +12,17 @@ logger = logging.getLogger(__name__)
 
 # Try to import docling VLM components
 try:
-    from docling.datamodel import vlm_model_specs
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.pipeline.vlm_pipeline import VlmPipeline
-    from docling.datamodel.pipeline_options import VlmPipelineOptions  # ADD THIS
     from docling.datamodel.settings import settings
     VLM_AVAILABLE = True
 except ImportError as e:
     VLM_AVAILABLE = False
-    vlm_model_specs = None
     InputFormat = None
     DocumentConverter = None
     PdfFormatOption = None
     VlmPipeline = None
-    VlmPipelineOptions = None  # ADD THIS
     settings = None
     logger.error(f"Failed to import docling VLM components: {e}")
 
@@ -39,19 +31,11 @@ class VlmParser:
     """
     VLM-powered PDF parser using Docling's VlmPipeline.
     
-    This parser uses Vision Language Models for end-to-end PDF parsing,
-    providing a simpler alternative to the standard pipeline. The converter
-    is pre-initialized at startup for fast inference.
-    
-    Note: VLM parsing does not support chunking or PDF optimization features.
+    Uses default GraniteDocling configuration with Transformers backend.
     """
     
     def __init__(self):
-        """
-        Initialize the VLM parser with pre-loaded model.
-        
-        The VLM model uses Docling's built-in GraniteDocling configuration.
-        """
+        """Initialize the VLM parser with default configuration."""
         self.mode = "vlm-pipeline"
         
         if not VLM_AVAILABLE:
@@ -67,29 +51,22 @@ class VlmParser:
             settings.debug.profile_pipeline_timings = True
             logger.info("🔍 Docling VLM pipeline profiling enabled")
         
-        # Initialize converter with VLM pipeline
         logger.info("============================================================")
         logger.info("🚀 Initializing VLM DocumentConverter (ONE-TIME SETUP)")
         logger.info("⚙️  Configuration:")
-        logger.info(f"   🤖 VLM Model: GraniteDocling (ibm-granite/granite-docling-258M)")
+        logger.info(f"   🤖 Model: GraniteDocling (default)")
+        logger.info(f"   🎯 Backend: Transformers (CUDA)")
         logger.info(f"   🧵 Threads: {num_threads} (OMP_NUM_THREADS)")
-        logger.info(f"   📝 Pipeline: VlmPipeline (Vision Language Model)")
-        logger.info(f"   🎯 Backend: Transformers (local inference)")
         
         init_start = time.time()
         
         try:
-            # Create VLM pipeline options with GraniteDocling model
-            pipeline_options = VlmPipelineOptions(
-                vlm_options=vlm_model_specs.GRANITEDOCLING,  # Use built-in config
-            )
-            
-            # Create converter with VLM pipeline
+            # Create converter with VLM pipeline - using defaults!
             self.converter = DocumentConverter(
                 format_options={
                     InputFormat.PDF: PdfFormatOption(
                         pipeline_cls=VlmPipeline,
-                        pipeline_options=pipeline_options,  # ADD THIS
+                        # No pipeline_options needed - uses defaults
                     ),
                 }
             )
@@ -112,19 +89,11 @@ class VlmParser:
         """
         Parse PDF content using VLM (Vision Language Model).
         
-        This method uses vision-based end-to-end parsing, which is particularly
-        effective for documents with complex layouts, images, and mixed content.
-        
         Args:
             pdf_content: PDF file content as bytes
             
         Returns:
-            Dictionary with:
-                - success: bool indicating if parsing succeeded
-                - content: markdown string if successful
-                - error: error message if failed
-                - processing_time: total time taken
-                - timings: detailed timing breakdown
+            Dictionary with parsing results
         """
         if not VLM_AVAILABLE or self.converter is None:
             return {
@@ -149,7 +118,6 @@ class VlmParser:
                 
                 # Parse the PDF using VLM
                 logger.info("⏳ Processing document with VLM...")
-                logger.info("   └─ Step 1: VLM inference (vision-based extraction)")
                 processing_start = time.time()
                 
                 # Use the pre-initialized VLM converter
@@ -159,7 +127,7 @@ class VlmParser:
                 logger.info(f"   ✅ VLM conversion complete: {conversion_time:.3f}s")
                 
                 # Extract content - export to markdown
-                logger.info("   └─ Step 2: Export to markdown")
+                logger.info("   └─ Exporting to markdown")
                 export_start = time.time()
                 document = result.document
                 markdown_content = document.export_to_markdown()
@@ -172,7 +140,6 @@ class VlmParser:
                 logger.info("📊 VLM Performance Breakdown:")
                 logger.info(f"   ├─ File I/O:        {file_write_time:.3f}s ({file_write_time/total_time*100:.1f}%)")
                 logger.info(f"   ├─ VLM Conversion:  {conversion_time:.3f}s ({conversion_time/total_time*100:.1f}%)")
-                logger.info(f"   │   └─ (Check logs above for Docling's detailed pipeline timings)")
                 logger.info(f"   ├─ Markdown Export: {export_time:.3f}s ({export_time/total_time*100:.1f}%)")
                 logger.info(f"   └─ TOTAL:           {total_time:.3f}s")
                 
@@ -183,7 +150,7 @@ class VlmParser:
                 if len(markdown_content) > 0:
                     logger.info(f"   └─ Throughput:      {len(markdown_content)/total_time:.0f} chars/sec")
                 else:
-                    logger.warning(f"   └─ ⚠️ No content extracted!")
+                    logger.warning(f"   └─ ⚠️  No content extracted!")
                 logger.info("============================================================")
                 
                 # Clean up temporary file
@@ -222,10 +189,11 @@ class VlmParser:
         return {
             "available": self.is_available(),
             "library": "docling" if VLM_AVAILABLE else None,
-            "pipeline": "VlmPipeline with GraniteDocling (pre-initialized)" if self.is_available() else None,
-            "description": "Vision Language Model for end-to-end PDF parsing with pre-initialized model",
+            "pipeline": "VlmPipeline (default GraniteDocling)",
+            "description": "Vision Language Model for end-to-end PDF parsing",
             "performance_mode": "optimized_with_preinitialization",
-            "vlm_model": "ibm-granite/granite-docling-258M",
+            "model": "GraniteDocling (ibm-granite/granite-docling-258M)",
+            "backend": "Transformers (CUDA)",
             "features": {
                 "vision_based": True,
                 "complex_layouts": True,
@@ -234,8 +202,7 @@ class VlmParser:
                 "optimization_support": False
             },
             "performance": {
-                "initialization": "One-time at startup (may take 30-60 seconds for VLM model download/load)",
+                "initialization": "One-time at startup",
                 "per_request": "Fast inference with pre-loaded model",
-                "notes": "VLM is particularly effective for complex documents with images and mixed layouts"
             }
         }
