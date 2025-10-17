@@ -71,6 +71,9 @@ class VlmParser:
         
         init_start = time.time()
         
+        # Initialize backup variable outside try block for exception handler access
+        docling_artifacts_backup = None
+        
         try:
             # Get model ID from environment
             model_id = os.getenv("DOCLING_VLM_MODEL", "ibm-granite/granite-docling-258M")
@@ -82,11 +85,13 @@ class VlmParser:
             hf_cache = os.getenv("HF_HOME", "/app/.cache/huggingface")
             logger.info(f"   📁 HF Cache: {hf_cache}")
             
-            # Temporarily unset DOCLING_ARTIFACTS_PATH to prevent interference
+            # CRITICAL: Temporarily unset DOCLING_ARTIFACTS_PATH to prevent interference
+            # Docling internally reads this env var and tries to load models from there
             docling_artifacts_backup = os.getenv("DOCLING_ARTIFACTS_PATH")
             if docling_artifacts_backup:
-                logger.info(f"   ⚠️  Temporarily ignoring DOCLING_ARTIFACTS_PATH for VLM model loading")
-                # Don't unset, just don't use it - VLM needs HF cache
+                logger.info(f"   ⚠️  Temporarily unsetting DOCLING_ARTIFACTS_PATH for VLM initialization")
+                logger.info(f"      (was: {docling_artifacts_backup})")
+                os.environ.pop("DOCLING_ARTIFACTS_PATH", None)
             
             # Choose device from environment
             device_env = os.getenv("DOCLING_ACCELERATOR_DEVICE", "cuda").lower()
@@ -138,12 +143,22 @@ class VlmParser:
             logger.info("📦 Pre-loading Granite-Docling VLM model from HuggingFace...")
             self.converter.initialize_pipeline(InputFormat.PDF)
             
+            # Restore DOCLING_ARTIFACTS_PATH after VLM initialization
+            if docling_artifacts_backup:
+                os.environ["DOCLING_ARTIFACTS_PATH"] = docling_artifacts_backup
+                logger.info(f"   ✅ Restored DOCLING_ARTIFACTS_PATH: {docling_artifacts_backup}")
+            
             init_time = time.time() - init_start
             logger.info(f"✅ VLM converter initialized in {init_time:.2f} seconds")
             logger.info("📝 VLM model is now cached in memory for fast inference")
             logger.info("============================================================")
             
         except Exception as e:
+            # Restore DOCLING_ARTIFACTS_PATH even on failure
+            if docling_artifacts_backup:
+                os.environ["DOCLING_ARTIFACTS_PATH"] = docling_artifacts_backup
+                logger.info(f"   ↩️  Restored DOCLING_ARTIFACTS_PATH after error")
+            
             logger.error(f"❌ Failed to initialize VLM converter: {str(e)}", exc_info=True)
             self.converter = None
             raise
