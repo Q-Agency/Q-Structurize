@@ -20,6 +20,7 @@ try:
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.pipeline.vlm_pipeline import VlmPipeline
+    from docling.datamodel.pipeline_options import VlmPipelineOptions  # ADD THIS
     from docling.datamodel.settings import settings
     VLM_AVAILABLE = True
 except ImportError as e:
@@ -29,6 +30,7 @@ except ImportError as e:
     DocumentConverter = None
     PdfFormatOption = None
     VlmPipeline = None
+    VlmPipelineOptions = None  # ADD THIS
     settings = None
     logger.error(f"Failed to import docling VLM components: {e}")
 
@@ -48,8 +50,7 @@ class VlmParser:
         """
         Initialize the VLM parser with pre-loaded model.
         
-        The VLM model is configurable via DOCLING_VLM_MODEL environment variable.
-        Default: ibm-granite/granite-docling-258M
+        The VLM model uses Docling's built-in GraniteDocling configuration.
         """
         self.mode = "vlm-pipeline"
         
@@ -57,9 +58,6 @@ class VlmParser:
             logger.error("Docling VLM components are not available")
             self.converter = None
             return
-        
-        # Read VLM model configuration from environment
-        self.vlm_model = os.environ.get('DOCLING_VLM_MODEL', 'ibm-granite/granite-docling-258M')
         
         # Get thread configuration
         num_threads = int(os.environ.get('OMP_NUM_THREADS', '100'))
@@ -73,19 +71,25 @@ class VlmParser:
         logger.info("============================================================")
         logger.info("🚀 Initializing VLM DocumentConverter (ONE-TIME SETUP)")
         logger.info("⚙️  Configuration:")
-        logger.info(f"   🤖 VLM Model: {self.vlm_model}")
+        logger.info(f"   🤖 VLM Model: GraniteDocling (ibm-granite/granite-docling-258M)")
         logger.info(f"   🧵 Threads: {num_threads} (OMP_NUM_THREADS)")
         logger.info(f"   📝 Pipeline: VlmPipeline (Vision Language Model)")
+        logger.info(f"   🎯 Backend: Transformers (local inference)")
         
         init_start = time.time()
         
         try:
+            # Create VLM pipeline options with GraniteDocling model
+            pipeline_options = VlmPipelineOptions(
+                vlm_options=vlm_model_specs.GRANITEDOCLING,  # Use built-in config
+            )
+            
             # Create converter with VLM pipeline
-            # Using default vlm_model_specs.GRANITEDOCLING which uses ibm-granite/granite-docling-258M
             self.converter = DocumentConverter(
                 format_options={
                     InputFormat.PDF: PdfFormatOption(
                         pipeline_cls=VlmPipeline,
+                        pipeline_options=pipeline_options,  # ADD THIS
                     ),
                 }
             )
@@ -176,7 +180,10 @@ class VlmParser:
                 logger.info(f"📄 Document Statistics:")
                 logger.info(f"   ├─ Content size:    {len(markdown_content):,} characters")
                 logger.info(f"   ├─ Input size:      {len(pdf_content):,} bytes")
-                logger.info(f"   └─ Throughput:      {len(markdown_content)/total_time:.0f} chars/sec")
+                if len(markdown_content) > 0:
+                    logger.info(f"   └─ Throughput:      {len(markdown_content)/total_time:.0f} chars/sec")
+                else:
+                    logger.warning(f"   └─ ⚠️ No content extracted!")
                 logger.info("============================================================")
                 
                 # Clean up temporary file
@@ -218,7 +225,7 @@ class VlmParser:
             "pipeline": "VlmPipeline with GraniteDocling (pre-initialized)" if self.is_available() else None,
             "description": "Vision Language Model for end-to-end PDF parsing with pre-initialized model",
             "performance_mode": "optimized_with_preinitialization",
-            "vlm_model": self.vlm_model if hasattr(self, 'vlm_model') else None,
+            "vlm_model": "ibm-granite/granite-docling-258M",
             "features": {
                 "vision_based": True,
                 "complex_layouts": True,
@@ -232,4 +239,3 @@ class VlmParser:
                 "notes": "VLM is particularly effective for complex documents with images and mixed layouts"
             }
         }
-
