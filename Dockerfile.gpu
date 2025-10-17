@@ -9,6 +9,8 @@ ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     DOCLING_ARTIFACTS_PATH=/root/.cache/docling/models \
     HF_HOME=/app/.cache/huggingface \
+    TRANSFORMERS_CACHE=/app/.cache/huggingface \
+    HUGGINGFACE_HUB_CACHE=/app/.cache/huggingface \
     PATH="/usr/local/bin:${PATH}"
 
 # Install Python 3.11 and system dependencies
@@ -41,11 +43,12 @@ RUN mkdir -p /root/.cache/docling/models ${HF_HOME} /app/uploads
 
 # (Optional) Pre-download models; will fill the mounted volume and persist
 # Comment out if you prefer first-run download to populate the volume.
-RUN echo "Pre-downloading Docling models (optional)..." && \
-    docling-tools models download || true
+# Skip Docling model predownload (we'll pull GraniteDocling directly from HF)
+# RUN docling-tools models download || true
 
-# Verify (non-fatal if empty on fresh volume)
-RUN ls -lah /root/.cache/docling/models || true
+# Just make sure the cache folders exist
+RUN mkdir -p /root/.cache/docling/models /app/.cache/huggingface && \
+    ls -lah /root/.cache/docling/models || true
 
 # Runtime environment variables (change these without invalidating cache layers above)
 # GPU-optimized settings for H200
@@ -79,6 +82,10 @@ ENV LOG_LEVEL=DEBUG \
     DOCLING_BATCH_TIMEOUT=0.5 \
     DOCLING_ACCELERATOR_DEVICE=cuda \
     DOCLING_VLM_MODEL=ibm-granite/granite-docling-258M
+
+# HuggingFace online mode (pull model on first start)
+ENV HF_HUB_OFFLINE=0 \
+    TRANSFORMERS_OFFLINE=0
 
 # Finally copy app sources (changes here don't invalidate pip layer)
 COPY . .

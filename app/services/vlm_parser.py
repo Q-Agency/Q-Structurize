@@ -15,6 +15,7 @@ try:
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.pipeline.vlm_pipeline import VlmPipeline
+    from docling.datamodel.pipeline_options import VlmPipelineOptions
     from docling.datamodel.settings import settings
     VLM_AVAILABLE = True
 except ImportError as e:
@@ -61,18 +62,29 @@ class VlmParser:
         init_start = time.time()
         
         try:
-            # Create converter with VLM pipeline - using defaults!
+            # Force explicit GraniteDocling HF model (avoid cache-root ambiguity)
+            from docling.datamodel.pipeline_options import VlmPipelineOptions
+
+            model_id = os.getenv("DOCLING_VLM_MODEL", "ibm-granite/granite-docling-258M")
+            logger.info(f"🔧 Using explicit VLM model_id = {model_id}")
+
+            pipeline_options = VlmPipelineOptions(
+                vlm_options={"repo_id": model_id},   # per docs: HF model repo
+                device=os.getenv("DOCLING_ACCELERATOR_DEVICE", "cuda"),
+                trust_remote_code=True,
+            )
+
             self.converter = DocumentConverter(
                 format_options={
                     InputFormat.PDF: PdfFormatOption(
                         pipeline_cls=VlmPipeline,
-                        # No pipeline_options needed - uses defaults
+                        pipeline_options=pipeline_options,
                     ),
                 }
             )
-            
-            # Pre-initialize the pipeline (loads VLM model into memory)
-            logger.info("📦 Pre-loading VLM model into memory...")
+
+            # Pre-initialize pipeline (loads GraniteDocling into VRAM)
+            logger.info("📦 Pre-loading GraniteDocling VLM model from HF...")
             self.converter.initialize_pipeline(InputFormat.PDF)
             
             init_time = time.time() - init_start
