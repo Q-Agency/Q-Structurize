@@ -133,11 +133,17 @@ class VlmParser:
         logger.info(f"✅ Accelerator: device={device}, threads=8")
         
         # Configure VLM Model Options for optimal H200 performance
-        model_path = os.environ.get('DOCLING_VLM_MODEL', 'ibm-granite/granite-docling-258M')
+        # Note: repo_id must be HuggingFace repo format, not local path
+        model_repo_id = 'ibm-granite/granite-docling-258M'
+        model_local_path = os.environ.get('DOCLING_VLM_MODEL', None)
+        
+        logger.info(f"📦 Using model: {model_repo_id}")
+        if model_local_path and os.path.exists(model_local_path):
+            logger.info(f"💾 Local model cache: {model_local_path}")
         
         try:
             vlm_pipeline_options.vlm_options = InlineVlmOptions(
-                repo_id=model_path,
+                repo_id=model_repo_id,  # Must be HuggingFace repo ID
                 prompt="Convert this page to markdown. Do not miss any text and only output the bare markdown!",
                 response_format=ResponseFormat.MARKDOWN,  # Required field
                 inference_framework=InferenceFramework.TRANSFORMERS,
@@ -147,7 +153,7 @@ class VlmParser:
                 temperature=0.0,  # Deterministic generation (faster)
             )
             logger.info(f"✅ VLM options configured:")
-            logger.info(f"   📦 Model: {model_path}")
+            logger.info(f"   📦 Model: {model_repo_id}")
             logger.info(f"   🎮 Device: {device}")
             logger.info(f"   🎯 Framework: TRANSFORMERS")
             logger.info(f"   🌡️  Temperature: 0.0 (deterministic, faster)")
