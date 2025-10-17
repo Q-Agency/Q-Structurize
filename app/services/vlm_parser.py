@@ -8,6 +8,12 @@ from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
+# Suppress verbose docling output
+logging.getLogger('docling').setLevel(logging.WARNING)
+logging.getLogger('docling.pipeline').setLevel(logging.WARNING)
+logging.getLogger('docling.pipeline.vlm_pipeline').setLevel(logging.WARNING)
+logging.getLogger('docling.backend').setLevel(logging.WARNING)
+
 # ============================================================================
 # PyTorch GPU Optimizations for H200
 # Configure PyTorch before importing docling to ensure GPU settings are applied
