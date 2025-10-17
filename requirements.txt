@@ -11,3 +11,4 @@ accelerate>=0.34
 sentencepiece>=0.1.99
 Pillow>=10.0.0
 docling-ibm-models==3.9.1
+flash-attn==2.5.9.post1
