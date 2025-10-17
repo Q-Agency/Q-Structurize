@@ -59,6 +59,7 @@ RUN mkdir -p /root/.cache/docling/models /app/.cache/huggingface && \
 # Runtime environment variables (change these without invalidating cache layers above)
 # GPU-optimized settings for H200
 ENV LOG_LEVEL=INFO \
+    PYTHONWARNINGS=ignore \
     TOKENIZERS_PARALLELISM=false \
     CUDA_VISIBLE_DEVICES=0 \
     PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
