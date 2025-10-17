@@ -151,6 +151,18 @@ class VlmParser:
         if model_local_path and os.path.exists(model_local_path):
             logger.info(f"💾 Local model cache: {model_local_path}")
         
+        # Force transformers to use BF16 via environment before model loads
+        import torch
+        os.environ['TRANSFORMERS_NO_ADVISORY_WARNINGS'] = '1'
+        
+        # Try to force model kwargs through environment
+        model_kwargs_env = {
+            'torch_dtype': 'bfloat16',
+            'device_map': 'cuda:0',
+            'low_cpu_mem_usage': True,
+        }
+        logger.info(f"🔧 Attempting to force model loading with: {model_kwargs_env}")
+        
         try:
             vlm_pipeline_options.vlm_options = InlineVlmOptions(
                 repo_id=model_repo_id,  # Must be HuggingFace repo ID
@@ -159,7 +171,7 @@ class VlmParser:
                 inference_framework=InferenceFramework.TRANSFORMERS,
                 transformers_model_type=TransformersModelType.AUTOMODEL_VISION2SEQ,
                 supported_devices=[device],  # Force our selected device
-                scale=1.5,  # Image scale (lower = faster, 1.0-2.0 range)
+                scale=1.0,  # Reduced from 1.5 - less preprocessing overhead
                 temperature=0.0,  # Deterministic generation (faster)
             )
             logger.info(f"✅ VLM options configured:")
@@ -167,7 +179,7 @@ class VlmParser:
             logger.info(f"   🎮 Device: {device}")
             logger.info(f"   🎯 Framework: TRANSFORMERS")
             logger.info(f"   🌡️  Temperature: 0.0 (deterministic, faster)")
-            logger.info(f"   📐 Image scale: 1.5")
+            logger.info(f"   📐 Image scale: 1.0 (minimal preprocessing)")
         except Exception as e:
             logger.error(f"❌ Failed to configure VLM options: {e}")
             raise
