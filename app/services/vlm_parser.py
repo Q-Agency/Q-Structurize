@@ -51,8 +51,6 @@ try:
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.pipeline.vlm_pipeline import VlmPipeline
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
-    from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
     VLM_AVAILABLE = True
 except ImportError as e:
     VLM_AVAILABLE = False
@@ -60,9 +58,6 @@ except ImportError as e:
     DocumentConverter = None
     PdfFormatOption = None
     VlmPipeline = None
-    PdfPipelineOptions = None
-    AcceleratorOptions = None
-    AcceleratorDevice = None
     logger.error(f"Failed to import docling VLM components: {e}")
 
 
@@ -97,35 +92,27 @@ class VlmParser:
         transformers_offline = os.environ.get('TRANSFORMERS_OFFLINE', 'Not set')
         logger.info(f"🌐 HF_HUB_OFFLINE: {hf_offline}, TRANSFORMERS_OFFLINE: {transformers_offline}")
         
-        # Configure VLM pipeline with GPU acceleration
-        logger.info("⚙️  Configuring VLM pipeline options...")
-        pipeline_options = PdfPipelineOptions()
+        # Configure VLM pipeline via environment variables
+        # VlmPipeline uses different configuration than StandardPdfPipeline
+        logger.info("⚙️  Configuring VLM pipeline via environment variables...")
         
-        # GPU Acceleration - configure for CUDA device
-        accelerator_device_str = os.environ.get('DOCLING_ACCELERATOR_DEVICE', 'cuda')
-        device_map = {
-            "cpu": AcceleratorDevice.CPU,
-            "cuda": AcceleratorDevice.CUDA,
-            "auto": AcceleratorDevice.AUTO
-        }
-        device = device_map.get(accelerator_device_str.lower(), AcceleratorDevice.CUDA)
-        
-        # For GPU workloads, use fewer threads (GPU does the heavy lifting)
-        num_threads = int(os.environ.get('OMP_NUM_THREADS', '8'))
-        
-        pipeline_options.accelerator_options = AcceleratorOptions(
-            device=device,
-            num_threads=num_threads
-        )
-        
-        logger.info(f"✅ Accelerator configured: device={device}, threads={num_threads}")
+        # GPU Configuration
+        accelerator_device = os.environ.get('DOCLING_ACCELERATOR_DEVICE', 'cuda')
+        logger.info(f"✅ Accelerator device: {accelerator_device}")
         
         # Mixed Precision Configuration (BF16 for H200)
         # BF16 provides ~2x speedup with better numerical stability than FP16
         vlm_dtype = os.environ.get('DOCLING_VLM_DTYPE', 'bfloat16')
+        os.environ['DOCLING_VLM_DTYPE'] = vlm_dtype
         logger.info(f"🔢 VLM precision: {vlm_dtype} (balanced speed/quality for H200)")
         
-        # Try to configure model dtype via pipeline options
+        # Batch Processing Configuration
+        # Process multiple pages in parallel for better GPU utilization
+        vlm_batch_size = os.environ.get('DOCLING_VLM_BATCH_SIZE', '4')
+        os.environ['DOCLING_VLM_BATCH_SIZE'] = vlm_batch_size
+        logger.info(f"📦 VLM batch size: {vlm_batch_size} pages")
+        
+        # Configure transformers to use GPU and mixed precision
         try:
             import torch
             dtype_map = {
@@ -137,47 +124,18 @@ class VlmParser:
                 'bf16': torch.bfloat16
             }
             torch_dtype = dtype_map.get(vlm_dtype.lower(), torch.bfloat16)
-            
-            # Configure model loading parameters if supported by VlmPipeline
-            if hasattr(pipeline_options, 'model_kwargs'):
-                pipeline_options.model_kwargs = {
-                    'torch_dtype': torch_dtype,
-                    'device_map': 'cuda:0' if device == AcceleratorDevice.CUDA else 'auto'
-                }
-                logger.info(f"✅ Model dtype configured: {torch_dtype}")
-            else:
-                # Set as environment variable for transformers to pick up
-                os.environ['DOCLING_VLM_DTYPE'] = vlm_dtype
-                logger.info(f"✅ VLM dtype set via environment: {vlm_dtype}")
+            logger.info(f"✅ PyTorch dtype: {torch_dtype}")
         except Exception as e:
-            logger.warning(f"⚠️  Could not configure model dtype: {e}")
-        
-        # Batch Processing Configuration
-        # Process multiple pages in parallel for better GPU utilization
-        vlm_batch_size = int(os.environ.get('DOCLING_VLM_BATCH_SIZE', '4'))
-        
-        # Try to configure batch size if supported
-        try:
-            if hasattr(pipeline_options, 'page_batch_size'):
-                pipeline_options.page_batch_size = vlm_batch_size
-                logger.info(f"✅ VLM batch size configured: {vlm_batch_size} pages")
-            elif hasattr(pipeline_options, 'batch_size'):
-                pipeline_options.batch_size = vlm_batch_size
-                logger.info(f"✅ VLM batch size configured: {vlm_batch_size} pages")
-            else:
-                # Set via environment for VLM to pick up during processing
-                os.environ['DOCLING_VLM_BATCH_SIZE'] = str(vlm_batch_size)
-                logger.info(f"📦 VLM batch size set via environment: {vlm_batch_size} pages")
-        except Exception as e:
-            logger.warning(f"⚠️  Could not configure batch size: {e}")
+            logger.debug(f"Could not configure PyTorch dtype: {e}")
         
         init_start = time.time()
         
+        # VlmPipeline will pick up configuration from environment variables
+        # and PyTorch GPU settings we configured above
         self.converter = DocumentConverter(
             format_options={
                 InputFormat.PDF: PdfFormatOption(
                     pipeline_cls=VlmPipeline,
-                    pipeline_options=pipeline_options,
                 ),
             }
         )
