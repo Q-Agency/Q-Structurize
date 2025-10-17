@@ -2,7 +2,7 @@ fastapi[standard]==0.118.0
 uvicorn==0.24.0
 pikepdf==8.7.0
 # Docling standard pipeline (CPU-only) with OCR, layout detection, table extraction, and VLM support
-docling==2.55.1
+docling[vlm]==2.57.0
 # Transformers for HuggingFace tokenizers (used for custom embedding model tokenization and VLM)
 transformers>=4.30.0
 # Pillow for image processing (required for VLM pipeline)
