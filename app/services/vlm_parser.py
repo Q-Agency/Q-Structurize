@@ -51,6 +51,7 @@ try:
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.pipeline.vlm_pipeline import VlmPipeline
+    from docling.datamodel.settings import settings
     VLM_AVAILABLE = True
 except ImportError as e:
     VLM_AVAILABLE = False
@@ -58,6 +59,7 @@ except ImportError as e:
     DocumentConverter = None
     PdfFormatOption = None
     VlmPipeline = None
+    settings = None
     logger.error(f"Failed to import docling VLM components: {e}")
 
 
@@ -92,6 +94,15 @@ class VlmParser:
         transformers_offline = os.environ.get('TRANSFORMERS_OFFLINE', 'Not set')
         logger.info(f"🌐 HF_HUB_OFFLINE: {hf_offline}, TRANSFORMERS_OFFLINE: {transformers_offline}")
         
+        # Try to configure docling settings for VLM performance
+        if settings:
+            try:
+                # Force larger batch sizes for VLM
+                settings.perf.page_batch_size = 16
+                logger.info(f"✅ Docling page_batch_size set to: {settings.perf.page_batch_size}")
+            except Exception as e:
+                logger.warning(f"⚠️  Could not configure docling settings: {e}")
+        
         # Configure VLM pipeline via environment variables
         # VlmPipeline uses different configuration than StandardPdfPipeline
         logger.info("⚙️  Configuring VLM pipeline via environment variables...")
@@ -112,7 +123,8 @@ class VlmParser:
         os.environ['DOCLING_VLM_BATCH_SIZE'] = vlm_batch_size
         logger.info(f"📦 VLM batch size: {vlm_batch_size} pages")
         
-        # Configure transformers to use GPU and mixed precision
+        # Force transformers to use BF16/FP16 via environment
+        # This ensures the model loads in lower precision from the start
         try:
             import torch
             dtype_map = {
@@ -124,7 +136,17 @@ class VlmParser:
                 'bf16': torch.bfloat16
             }
             torch_dtype = dtype_map.get(vlm_dtype.lower(), torch.bfloat16)
+            
+            # Set transformers environment variables to force precision
+            os.environ['TRANSFORMERS_DEFAULT_DTYPE'] = vlm_dtype
+            
+            # Force model to load on GPU in the specified precision
+            if torch.cuda.is_available():
+                # These env vars help transformers auto-select device and dtype
+                os.environ['CUDA_LAUNCH_BLOCKING'] = '0'  # Non-blocking for better performance
+                
             logger.info(f"✅ PyTorch dtype: {torch_dtype}")
+            logger.info(f"⚙️  Transformers will attempt to load model in {vlm_dtype} on {accelerator_device}")
         except Exception as e:
             logger.debug(f"Could not configure PyTorch dtype: {e}")
         
