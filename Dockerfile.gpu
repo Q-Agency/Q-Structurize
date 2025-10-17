@@ -39,7 +39,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu121 && \
     pip install --no-cache-dir -r requirements.txt
 
-# Prepare cache directories (these will be volumes at runtime)
+# Download Granite Docling snapshot into a dedicated folder (NOT the parent)
+RUN huggingface-cli download ibm-granite/granite-docling-258M \
+      --local-dir /opt/models/granite-docling-258M \
+      --local-dir-use-symlinks False
+
+    # Prepare cache directories (these will be volumes at runtime)
 RUN mkdir -p /root/.cache/docling/models ${HF_HOME} /app/uploads
 
 # (Optional) Pre-download models; will fill the mounted volume and persist
@@ -82,8 +87,10 @@ ENV LOG_LEVEL=DEBUG \
     DOCLING_QUEUE_MAX_SIZE=2000 \
     DOCLING_BATCH_TIMEOUT=0.5 \
     DOCLING_ACCELERATOR_DEVICE=cuda \
-    DOCLING_VLM_MODEL=ibm-granite/granite-docling-258M \
-    TRANSFORMERS_TRUST_REMOTE_CODE=1
+    DOCLING_VLM_MODEL=/opt/models/granite-docling-258M \
+    TRANSFORMERS_TRUST_REMOTE_CODE=1 \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
 
 # HuggingFace online mode (pull model on first start)
 ENV HF_HUB_OFFLINE=0 \
