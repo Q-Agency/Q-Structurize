@@ -8,13 +8,15 @@ from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# Suppress ALL docling debug output - set root docling logger to WARNING
-# This catches all submodules including markdown export
-for logger_name in ['docling', 'docling.pipeline', 'docling.backend', 
-                     'docling.document_converter', 'docling.datamodel',
-                     'docling.chunking', 'docling.models']:
+# Suppress most docling debug output but keep VLM pipeline logs for performance monitoring
+for logger_name in ['docling.backend', 'docling.document_converter', 
+                     'docling.datamodel', 'docling.chunking', 'docling.models']:
     logging.getLogger(logger_name).setLevel(logging.WARNING)
     logging.getLogger(logger_name).propagate = False
+
+# Keep VLM pipeline at INFO to see token generation stats
+logging.getLogger('docling.pipeline.vlm_pipeline').setLevel(logging.INFO)
+logging.getLogger('docling.pipeline').setLevel(logging.INFO)
 
 # ============================================================================
 # PyTorch GPU Optimizations for H200
