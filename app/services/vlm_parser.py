@@ -171,7 +171,7 @@ class VlmParser:
                 inference_framework=InferenceFramework.TRANSFORMERS,
                 transformers_model_type=TransformersModelType.AUTOMODEL_VISION2SEQ,
                 supported_devices=[device],  # Force our selected device
-                scale=1.0,  # Reduced from 1.5 - less preprocessing overhead
+                scale=2.0,  # Higher quality for proper text extraction (1.0 was too low)
                 temperature=0.0,  # Deterministic generation (faster)
             )
             logger.info(f"✅ VLM options configured:")
@@ -179,7 +179,7 @@ class VlmParser:
             logger.info(f"   🎮 Device: {device}")
             logger.info(f"   🎯 Framework: TRANSFORMERS")
             logger.info(f"   🌡️  Temperature: 0.0 (deterministic, faster)")
-            logger.info(f"   📐 Image scale: 1.0 (minimal preprocessing)")
+            logger.info(f"   📐 Image scale: 2.0 (quality optimized for text extraction)")
         except Exception as e:
             logger.error(f"❌ Failed to configure VLM options: {e}")
             raise
