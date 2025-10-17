@@ -3,7 +3,7 @@ uvicorn==0.24.0
 pikepdf==8.7.0
 # Docling standard pipeline (CPU-only) with OCR, layout detection, table extraction, and VLM support
 docling[vlm]==2.57.0
-docling-core[chunking]==2.57.0
+docling-core[chunking]>=2.48.2,<3.0.0
 # Match docling[vlm] constraints
 transformers==4.46.3
 tokenizers==0.20.1
