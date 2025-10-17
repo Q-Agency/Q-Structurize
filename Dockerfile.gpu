@@ -81,7 +81,8 @@ ENV LOG_LEVEL=DEBUG \
     DOCLING_QUEUE_MAX_SIZE=2000 \
     DOCLING_BATCH_TIMEOUT=0.5 \
     DOCLING_ACCELERATOR_DEVICE=cuda \
-    DOCLING_VLM_MODEL=ibm-granite/granite-docling-258M
+    DOCLING_VLM_MODEL=ibm-granite/granite-docling-258M \
+    TRANSFORMERS_TRUST_REMOTE_CODE=1
 
 # HuggingFace online mode (pull model on first start)
 ENV HF_HUB_OFFLINE=0 \

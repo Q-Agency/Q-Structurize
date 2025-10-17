@@ -5,7 +5,9 @@ pikepdf==8.7.0
 docling==2.57.0
 docling-core[chunking]==2.49.0
 # Match docling[vlm] constraints
-transformers==4.46.3
-tokenizers==0.20.1
+transformers==4.57.1
+tokenizers==0.22.0
 accelerate>=0.34
+sentencepiece>=0.1.99
 Pillow>=10.0.0
+docling-ibm-models==3.9.1
