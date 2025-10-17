@@ -251,6 +251,7 @@ async def root():
         "endpoints": {
             "parse": "/parse/file - Parse PDF with configurable options",
             "parser_info": "/parsers/info - Get parser capabilities",
+            "verify_granite_vlm": "/parsers/vlm/verify-granite - Verify Granite VLM model configuration",
             "pipeline_options": "/parsers/options - Get available configuration options",
             "docs": "/docs - Swagger UI documentation",
             "redoc": "/redoc - ReDoc documentation"
@@ -277,6 +278,43 @@ async def get_parser_info():
     return {
         "standard_parser": docling_parser.get_parser_info(),
         "vlm_parser": vlm_parser.get_parser_info()
+    }
+
+
+@app.get("/parsers/vlm/verify-granite",
+         summary="Verify Granite VLM Model",
+         description="Verify that IBM Granite VLM model is properly configured and available",
+         tags=["System"])
+async def verify_granite_vlm():
+    """
+    Verify that IBM Granite VLM model is configured and available.
+    
+    Returns detailed information about:
+    - Environment configuration
+    - Model path and existence
+    - Model files present
+    - Offline mode status
+    - Model architecture details from config.json
+    
+    This endpoint helps confirm you're using the correct Granite model.
+    """
+    if not vlm_parser.is_available():
+        return {
+            "status": "unavailable",
+            "message": "VLM parser is not available",
+            "verification": None
+        }
+    
+    verification = vlm_parser.verify_granite_model()
+    
+    status = "verified" if verification["is_granite"] and verification["model_exists"] else "not_verified"
+    
+    return {
+        "status": status,
+        "message": "Granite VLM model verified successfully" if status == "verified" else "Granite VLM model verification failed or incomplete",
+        "verification": verification,
+        "expected_model": "ibm-granite/granite-docling-258M",
+        "recommendation": "Ensure DOCLING_VLM_MODEL environment variable points to /opt/models/granite-docling-258M" if status != "verified" else None
     }
 
 
