@@ -14,9 +14,9 @@ for logger_name in ['docling.backend', 'docling.document_converter',
     logging.getLogger(logger_name).setLevel(logging.WARNING)
     logging.getLogger(logger_name).propagate = False
 
-# Keep VLM pipeline at INFO to see token generation stats
-logging.getLogger('docling.pipeline.vlm_pipeline').setLevel(logging.INFO)
-logging.getLogger('docling.pipeline').setLevel(logging.INFO)
+# Keep VLM pipeline at DEBUG temporarily to see token generation stats
+logging.getLogger('docling.pipeline.vlm_pipeline').setLevel(logging.DEBUG)
+logging.getLogger('docling.pipeline').setLevel(logging.DEBUG)
 
 # ============================================================================
 # PyTorch GPU Optimizations for H200
