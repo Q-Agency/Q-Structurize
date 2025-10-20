@@ -22,7 +22,7 @@ from typing import Optional, Dict, Any
 try:
     import torch
     # Read thread count from Dockerfile ENV (default to 100 if not set)
-    num_threads = int(os.environ.get('OMP_NUM_THREADS', '100'))
+    num_threads = int(os.environ.get('OMP_NUM_THREADS', '64'))
     torch.set_num_threads(num_threads)              # Intra-op parallelism
     torch.set_num_interop_threads(max(1, num_threads // 10))  # Inter-op (10% of threads)
     logging.getLogger(__name__).info(f"✅ PyTorch threading configured: {torch.get_num_threads()} intra-op, {torch.get_num_interop_threads()} inter-op threads")
