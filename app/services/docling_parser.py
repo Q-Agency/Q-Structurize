@@ -15,32 +15,44 @@ import logging
 import time
 from typing import Optional, Dict, Any
 
+import logging, os, sys
+
+logger = logging.getLogger(__name__)
+# Only attach once to avoid duplicate logs on reload
+if not logger.handlers:
+    h = logging.StreamHandler(sys.stdout)
+    level = os.getenv("LOG_LEVEL", "INFO").upper()
+    h.setLevel(level)
+    fmt = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+    h.setFormatter(fmt)
+    logger.addHandler(h)
+    logger.setLevel(level)
+    # prevent double propagation into root if uvicorn/root also handles
+    logger.propagate = False
 
 
 # Configure PyTorch threading and GPU optimizations (must be done before importing docling)
 # PyTorch doesn't always respect TORCH_NUM_THREADS env var, so we set it explicitly
 try:
     import torch
-    # Read thread count from Dockerfile ENV (default to 100 if not set)
     num_threads = int(os.environ.get('OMP_NUM_THREADS', '64'))
-    torch.set_num_threads(num_threads)              # Intra-op parallelism
-    torch.set_num_interop_threads(max(1, num_threads // 10))  # Inter-op (10% of threads)
-    logging.getLogger(__name__).info(f"✅ PyTorch threading configured: {torch.get_num_threads()} intra-op, {torch.get_num_interop_threads()} inter-op threads")
-    
-    # Enable TF32 for better performance on Ampere/Hopper GPUs (H200)
-    # TF32 provides ~8x speedup with minimal accuracy loss
+    torch.set_num_threads(num_threads)
+    torch.set_num_interop_threads(max(1, num_threads // 10))
+    logger.info("✅ PyTorch threading configured: %s intra-op, %s inter-op threads",
+                torch.get_num_threads(), torch.get_num_interop_threads())
+
     if torch.cuda.is_available():
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
         try:
-            torch.set_float32_matmul_precision("high")  # PyTorch 2.x
-            logging.getLogger(__name__).info("✅ GPU optimizations enabled: TF32 matmul and cuDNN")
+            torch.set_float32_matmul_precision("high")
+            logger.info("✅ GPU optimizations enabled: TF32 matmul and cuDNN")
         except Exception:
-            logging.getLogger(__name__).info("✅ GPU optimizations enabled: TF32 matmul and cuDNN (float32 precision not available)")
+            logger.info("✅ GPU optimizations enabled: TF32 matmul and cuDNN (float32 precision not available)")
 except ImportError:
-    logging.getLogger(__name__).warning("⚠️  PyTorch not available, skipping torch threading configuration")
+    logger.warning("⚠️  PyTorch not available, skipping torch threading configuration")
 except Exception as e:
-    logging.getLogger(__name__).warning(f"⚠️  Could not configure PyTorch threading: {e}")
+    logger.warning("⚠️  Could not configure PyTorch threading: %s", e)
 
 # Try to import docling
 try:
