@@ -158,7 +158,7 @@ class DoclingParser:
         self.converter = DocumentConverter(
             format_options={
                 InputFormat.PDF: PdfFormatOption(
-                    pipeline_cls=ThreadedStandardPdfPipeline,
+                    pipeline_cls=StandardPdfPipeline,
                     pipeline_options=pipeline_options,
                 ),
             }
