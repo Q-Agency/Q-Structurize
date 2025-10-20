@@ -50,6 +50,7 @@ try:
     from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions, TableFormerMode
     from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
     from docling.datamodel.settings import settings
+    from docling.pipeline.threaded_standard_pdf_pipeline import ThreadedStandardPdfPipeline
     settings.perf.page_batch_size = int(os.environ.get('DOCLING_PAGE_BATCH_SIZE', '12'))
     DOCLING_AVAILABLE = True
 except ImportError as e:
@@ -157,7 +158,7 @@ class DoclingParser:
         self.converter = DocumentConverter(
             format_options={
                 InputFormat.PDF: PdfFormatOption(
-                    pipeline_cls=StandardPdfPipeline,
+                    pipeline_cls=ThreadedStandardPdfPipeline,
                     pipeline_options=pipeline_options,
                 ),
             }
