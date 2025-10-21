@@ -88,9 +88,26 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
                     # Check if first item is a list (rows)
                     if isinstance(grid[0], list):
                         logger.info("Grid is a list of lists (table rows)")
-                        result['headers'] = grid[0] if grid else None
-                        result['rows'] = grid[1:] if len(grid) > 1 else []
+                        
+                        # Extract text from TableCell objects
+                        extracted_rows = []
+                        for row in grid:
+                            extracted_row = []
+                            for cell in row:
+                                # Extract text from TableCell objects
+                                if hasattr(cell, 'text'):
+                                    extracted_row.append(cell.text)
+                                elif isinstance(cell, str):
+                                    extracted_row.append(cell)
+                                else:
+                                    extracted_row.append(str(cell))
+                            extracted_rows.append(extracted_row)
+                        
+                        result['headers'] = extracted_rows[0] if extracted_rows else None
+                        result['rows'] = extracted_rows[1:] if len(extracted_rows) > 1 else []
                         logger.info(f"✅ Extracted from grid list: {len(result['rows'])} rows")
+                        logger.info(f"Sample header: {result['headers'][:3] if result['headers'] else 'None'}")
+                        logger.info(f"Sample row: {result['rows'][0][:3] if result['rows'] else 'None'}")
                         return result
                     else:
                         logger.info(f"Grid first item type: {type(grid[0])}")
@@ -407,6 +424,7 @@ def serialize_table_from_chunk(chunk: BaseChunk, document: Any = None) -> Option
                                             rows=table_struct['rows'],
                                             caption=caption
                                         )
+                                        logger.info(f"📝 Serialized table preview: {serialized[:200]}...")
                                         return serialized
                                 else:
                                     logger.warning("Actual table has no 'data' attribute")
@@ -447,6 +465,7 @@ def serialize_table_from_chunk(chunk: BaseChunk, document: Any = None) -> Option
         caption=caption
     )
     
-    logger.debug(f"Serialized table: {len(table_struct['rows'])} rows, {len(table_struct['headers'])} columns")
+    logger.info(f"Serialized table: {len(table_struct['rows'])} rows, {len(table_struct['headers'])} columns")
+    logger.info(f"📝 Serialized table preview: {serialized[:200]}...")
     
     return serialized
