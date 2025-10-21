@@ -73,7 +73,46 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
         else:
             # Access grid structure
             grid = table_data.grid
-            logger.info(f"Found grid structure (type: {type(grid)})")
+            logger.info(f"Found grid structure (type: {type(grid)}, repr: {type(grid).__name__})")
+            logger.info(f"Is list check: isinstance(grid, list) = {isinstance(grid, list)}")
+            logger.info(f"Grid length: {len(grid) if hasattr(grid, '__len__') else 'N/A'}")
+            if grid:
+                logger.info(f"Grid sample (first item): {str(grid[0])[:100] if len(grid) > 0 else 'empty'}")
+            
+            # Check if grid is already a list (plain data structure)
+            if isinstance(grid, list):
+                logger.info(f"Grid is a plain list with {len(grid)} items")
+                
+                # If it's a list of lists, it's the table data directly!
+                if grid and len(grid) > 0:
+                    # Check if first item is a list (rows)
+                    if isinstance(grid[0], list):
+                        logger.info("Grid is a list of lists (table rows)")
+                        result['headers'] = grid[0] if grid else None
+                        result['rows'] = grid[1:] if len(grid) > 1 else []
+                        logger.info(f"✅ Extracted from grid list: {len(result['rows'])} rows")
+                        return result
+                    else:
+                        logger.info(f"Grid first item type: {type(grid[0])}")
+                        # Try to get text from objects
+                        rows_from_objects = []
+                        for row_item in grid:
+                            if isinstance(row_item, list):
+                                rows_from_objects.append(row_item)
+                            elif hasattr(row_item, 'cells'):
+                                # It's a row object with cells
+                                row = [cell.text if hasattr(cell, 'text') else str(cell) for cell in row_item.cells]
+                                rows_from_objects.append(row)
+                        
+                        if rows_from_objects:
+                            result['headers'] = rows_from_objects[0] if rows_from_objects else None
+                            result['rows'] = rows_from_objects[1:] if len(rows_from_objects) > 1 else []
+                            logger.info(f"✅ Extracted from grid objects: {len(result['rows'])} rows")
+                            return result
+                
+                # If we get here, grid format wasn't recognized
+                logger.info(f"Grid list format not recognized. Sample: {str(grid[:2])[:200]}")
+                # Continue to try other methods below
             
             # Try method 1: num_rows and num_cols
             if hasattr(grid, 'num_rows') and hasattr(grid, 'num_cols'):
