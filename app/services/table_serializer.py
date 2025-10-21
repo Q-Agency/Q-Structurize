@@ -246,7 +246,7 @@ def format_table_as_keyvalue(
     return '\n'.join(lines)
 
 
-def serialize_table_from_chunk(chunk: BaseChunk) -> Optional[str]:
+def serialize_table_from_chunk(chunk: BaseChunk, document: Any = None) -> Optional[str]:
     """
     Serialize table from a chunk's doc_items.
     
@@ -308,6 +308,37 @@ def serialize_table_from_chunk(chunk: BaseChunk) -> Optional[str]:
     if not hasattr(table_item, 'data'):
         logger.warning("Table item has no 'data' attribute!")
         logger.info(f"Table item attributes: {[attr for attr in dir(table_item) if not attr.startswith('_')][:20]}")
+        
+        # Try to get data via model_dump()
+        if hasattr(table_item, 'model_dump'):
+            logger.info("Trying to get data via model_dump()...")
+            try:
+                item_data = table_item.model_dump()
+                logger.info(f"model_dump keys: {list(item_data.keys())}")
+                
+                # Check if there's table data in the dump
+                if 'data' in item_data and item_data['data']:
+                    logger.info("Found 'data' in model_dump!")
+                    # Try to reconstruct table data
+                    # For now, just log what we find
+                    logger.info(f"Data content: {str(item_data['data'])[:200]}")
+                    
+                # Check for other potential table data fields
+                for key in ['content', 'table', 'grid', 'cells']:
+                    if key in item_data:
+                        logger.info(f"Found '{key}' in model_dump: {type(item_data[key])}")
+                        
+            except Exception as e:
+                logger.warning(f"model_dump() failed: {e}")
+        
+        # Try get_ref() to get reference
+        if hasattr(table_item, 'get_ref'):
+            try:
+                ref = table_item.get_ref()
+                logger.info(f"get_ref() returned: {ref}")
+            except Exception as e:
+                logger.warning(f"get_ref() failed: {e}")
+        
         return None
     
     if not table_item.data:

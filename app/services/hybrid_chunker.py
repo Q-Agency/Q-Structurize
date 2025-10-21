@@ -270,8 +270,8 @@ def chunk_document(
             # Log if this is a table chunk
             if metadata.get("content_type") == "table":
                 logger.info(f"Chunk {chunk_idx}: Detected as table, attempting serialization")
-                # Serialize table from chunk's doc_items
-                serialized = serialize_table_from_chunk(chunk)
+                # Serialize table from chunk's doc_items (pass document for reference resolution)
+                serialized = serialize_table_from_chunk(chunk, document=document)
                 if serialized:
                     # Use serialized table text instead of default text
                     final_text = f"search_document: {serialized}"
