@@ -58,37 +58,27 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
     result = {
         'headers': None,
         'rows': [],
-        'num_rows': 0,
-        'num_cols': 0,
     }
     
     try:
         # Check if table_data has grid
         if not hasattr(table_data, 'grid'):
-            logger.info("TableData has no 'grid' attribute")
-            logger.info(f"TableData attributes: {[attr for attr in dir(table_data) if not attr.startswith('_')][:20]}")
+            logger.debug("TableData has no 'grid' attribute")
+            logger.debug(f"TableData attributes: {[attr for attr in dir(table_data) if not attr.startswith('_')][:20]}")
             # Try direct markdown export as fallback
         elif not table_data.grid:
-            logger.info("TableData.grid is None")
+            logger.debug("TableData.grid is None")
         else:
             # Access grid structure
             grid = table_data.grid
-            logger.info(f"Found grid structure (type: {type(grid)}, repr: {type(grid).__name__})")
-            logger.info(f"Is list check: isinstance(grid, list) = {isinstance(grid, list)}")
-            logger.info(f"Grid length: {len(grid) if hasattr(grid, '__len__') else 'N/A'}")
-            if grid:
-                logger.info(f"Grid sample (first item): {str(grid[0])[:100] if len(grid) > 0 else 'empty'}")
+            logger.debug(f"Found grid structure (type: {type(grid)}, repr: {type(grid).__name__})")
             
             # Check if grid is already a list (plain data structure)
             if isinstance(grid, list):
-                logger.info(f"Grid is a plain list with {len(grid)} items")
-                
                 # If it's a list of lists, it's the table data directly!
                 if grid and len(grid) > 0:
                     # Check if first item is a list (rows)
                     if isinstance(grid[0], list):
-                        logger.info("Grid is a list of lists (table rows)")
-                        
                         # Extract text from TableCell objects
                         extracted_rows = []
                         for row in grid:
@@ -106,11 +96,9 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
                         result['headers'] = extracted_rows[0] if extracted_rows else None
                         result['rows'] = extracted_rows[1:] if len(extracted_rows) > 1 else []
                         logger.info(f"✅ Extracted from grid list: {len(result['rows'])} rows")
-                        logger.info(f"Sample header: {result['headers'][:3] if result['headers'] else 'None'}")
-                        logger.info(f"Sample row: {result['rows'][0][:3] if result['rows'] else 'None'}")
                         return result
                     else:
-                        logger.info(f"Grid first item type: {type(grid[0])}")
+                        logger.debug(f"Grid first item type: {type(grid[0])}")
                         # Try to get text from objects
                         rows_from_objects = []
                         for row_item in grid:
@@ -128,18 +116,12 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
                             return result
                 
                 # If we get here, grid format wasn't recognized
-                logger.info(f"Grid list format not recognized. Sample: {str(grid[:2])[:200]}")
+                logger.debug(f"Grid list format not recognized. Sample: {str(grid[:2])[:200]}")
                 # Continue to try other methods below
             
-            # Try method 1: num_rows and num_cols
-            if hasattr(grid, 'num_rows') and hasattr(grid, 'num_cols'):
-                result['num_rows'] = grid.num_rows
-                result['num_cols'] = grid.num_cols
-                logger.info(f"Grid size: {grid.num_rows} rows x {grid.num_cols} cols")
-            
-            # Try method 2: export_to_dataframe (if available)
+            # Try method: export_to_dataframe (if available)
             if hasattr(grid, 'export_to_dataframe'):
-                logger.info("Trying export_to_dataframe...")
+                logger.debug("Trying export_to_dataframe...")
                 try:
                     df = grid.export_to_dataframe()
                     if df is not None and not df.empty:
@@ -148,15 +130,15 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
                         logger.info(f"✅ Extracted via dataframe: {len(result['rows'])} rows")
                         return result
                     else:
-                        logger.info("export_to_dataframe returned empty/None")
+                        logger.debug("export_to_dataframe returned empty/None")
                 except Exception as e:
-                    logger.info(f"export_to_dataframe failed: {e}")
+                    logger.debug(f"export_to_dataframe failed: {e}")
             else:
-                logger.info("Grid has no export_to_dataframe method")
+                logger.debug("Grid has no export_to_dataframe method")
             
-            # Try method 3: export_to_list
+            # Try method: export_to_list
             if hasattr(grid, 'export_to_list'):
-                logger.info("Trying export_to_list...")
+                logger.debug("Trying export_to_list...")
                 try:
                     rows = grid.export_to_list()
                     if rows and len(rows) > 0:
@@ -165,15 +147,15 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
                         logger.info(f"✅ Extracted via list: {len(result['rows'])} rows")
                         return result
                     else:
-                        logger.info("export_to_list returned empty")
+                        logger.debug("export_to_list returned empty")
                 except Exception as e:
-                    logger.info(f"export_to_list failed: {e}")
+                    logger.debug(f"export_to_list failed: {e}")
             else:
-                logger.info("Grid has no export_to_list method")
+                logger.debug("Grid has no export_to_list method")
             
-            # Try method 4: Iterate cells
+            # Try method: Iterate cells
             if hasattr(grid, 'cells'):
-                logger.info("Trying cell iteration...")
+                logger.debug("Trying cell iteration...")
                 try:
                     cells = grid.cells
                     rows_dict = {}
@@ -203,20 +185,19 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
                             logger.info(f"✅ Extracted via cells: {len(result['rows'])} rows")
                             return result
                     else:
-                        logger.info("Cell iteration produced no rows")
+                        logger.debug("Cell iteration produced no rows")
                             
                 except Exception as e:
-                    logger.info(f"Cell iteration failed: {e}")
+                    logger.debug(f"Cell iteration failed: {e}")
             else:
-                logger.info("Grid has no cells attribute")
+                logger.debug("Grid has no cells attribute")
         
-        # Try method 5: Direct table text via export_to_markdown
+        # Try method: Direct table text via export_to_markdown
         if hasattr(table_data, 'export_to_markdown'):
-            logger.info("Trying export_to_markdown...")
+            logger.debug("Trying export_to_markdown...")
             try:
                 markdown = table_data.export_to_markdown()
                 if markdown and '|' in markdown:
-                    logger.info(f"Got markdown (length: {len(markdown)})")
                     # Parse markdown table
                     lines = [l.strip() for l in markdown.strip().split('\n') if l.strip()]
                     data_lines = [l for l in lines if l.count('|') > 1 and not all(c in '|-: ' for c in l)]
@@ -233,15 +214,15 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
                             logger.info(f"✅ Extracted via markdown: {len(result['rows'])} rows")
                             return result
                         else:
-                            logger.info("Markdown parsing produced no rows")
+                            logger.debug("Markdown parsing produced no rows")
                     else:
-                        logger.info("No data lines found in markdown")
+                        logger.debug("No data lines found in markdown")
                 else:
-                    logger.info("export_to_markdown returned no markdown or no pipes")
+                    logger.debug("export_to_markdown returned no markdown or no pipes")
             except Exception as e:
-                logger.info(f"export_to_markdown failed: {e}")
+                logger.debug(f"export_to_markdown failed: {e}")
         else:
-            logger.info("TableData has no export_to_markdown method")
+            logger.debug("TableData has no export_to_markdown method")
         
     except Exception as e:
         logger.warning(f"Failed to extract table structure: {e}")
@@ -362,30 +343,7 @@ def serialize_table_from_chunk(chunk: BaseChunk, document: Any = None) -> Option
     
     # Check if table item has data
     if not hasattr(table_item, 'data'):
-        logger.warning("Table item has no 'data' attribute!")
-        logger.info(f"Table item attributes: {[attr for attr in dir(table_item) if not attr.startswith('_')][:20]}")
-        
-        # Try to get data via model_dump()
-        if hasattr(table_item, 'model_dump'):
-            logger.info("Trying to get data via model_dump()...")
-            try:
-                item_data = table_item.model_dump()
-                logger.info(f"model_dump keys: {list(item_data.keys())}")
-                
-                # Check if there's table data in the dump
-                if 'data' in item_data and item_data['data']:
-                    logger.info("Found 'data' in model_dump!")
-                    # Try to reconstruct table data
-                    # For now, just log what we find
-                    logger.info(f"Data content: {str(item_data['data'])[:200]}")
-                    
-                # Check for other potential table data fields
-                for key in ['content', 'table', 'grid', 'cells']:
-                    if key in item_data:
-                        logger.info(f"Found '{key}' in model_dump: {type(item_data[key])}")
-                        
-            except Exception as e:
-                logger.warning(f"model_dump() failed: {e}")
+        logger.warning("Table item has no 'data' attribute, trying reference resolution...")
         
         # Try get_ref() to get reference and resolve it from document
         if hasattr(table_item, 'get_ref'):

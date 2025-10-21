@@ -10,19 +10,13 @@ from app.models.schemas import ParseResponse, ChunkData, ChunkMetadata, Chunking
 from app.config import PIPELINE_OPTIONS_CONFIG, get_custom_openapi
 
 # Configure logging
-# Set to DEBUG to see Docling's internal pipeline profiling logs
 import os
-log_level = os.environ.get('LOG_LEVEL', 'DEBUG').upper()
+log_level = os.environ.get('LOG_LEVEL', 'INFO').upper()
 logging.basicConfig(
-    level=getattr(logging, log_level, logging.DEBUG),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=getattr(logging, log_level, logging.INFO),
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# Enable DEBUG logging for Docling's internal components to see profiling
-logging.getLogger('docling').setLevel(logging.DEBUG)
-logging.getLogger('docling.backend').setLevel(logging.DEBUG)
-logging.getLogger('docling.pipeline').setLevel(logging.DEBUG)
 
 # Initialize services
 pdf_optimizer = PDFOptimizer()
@@ -77,28 +71,15 @@ async def parse_pdf_file(
         raise HTTPException(status_code=415, detail="File must be a PDF")
     
     try:
-        # ========================================
-        # STEP 1: READ FILE CONTENT
-        # ========================================
+        # Read file content
         pdf_content = await file.read()
-        logger.info(f"Received PDF file: {file.filename}, size: {len(pdf_content)} bytes")
+        logger.info(f"📄 Received: {file.filename} ({len(pdf_content):,} bytes)")
         
-        # ========================================
-        # STEP 2: PDF OPTIMIZATION (if requested)
-        # ========================================
+        # PDF optimization (if requested)
         if optimize_pdf:
-            logger.info("Running PDF optimization...")
             pdf_content, size_info = PDFOptimizer.optimize_pdf(pdf_content)
-            
-            # Log optimization results for monitoring
-            if size_info:
-                logger.info(f"PDF optimization completed - Original: {size_info['original_size_bytes']} bytes, "
-                           f"Optimized: {size_info['optimized_size_bytes']} bytes, "
-                           f"Reduction: {size_info['size_reduction_percentage']}%")
         
-        # ========================================
-        # STEP 3: PDF PARSING WITH DOCLING BATCHED PROCESSING
-        # ========================================
+        # PDF parsing
         if not docling_parser.is_available():
             raise HTTPException(
                 status_code=503, 
@@ -107,9 +88,6 @@ async def parse_pdf_file(
         
         # Branch: Chunking vs Standard Markdown
         if enable_chunking:
-            metadata_mode = "full" if include_full_metadata else "curated"
-            logger.info(f"Starting PDF parsing with chunking (metadata={metadata_mode}, max_tokens={max_tokens_per_chunk}, merge_peers={merge_peers}, serialize_tables={serialize_tables})...")
-            
             # Parse to DoclingDocument object
             document = docling_parser.parse_pdf_to_document(pdf_content)
             
@@ -119,15 +97,13 @@ async def parse_pdf_file(
                 try:
                     tokenizer_manager = get_tokenizer_manager()
                     tokenizer = tokenizer_manager.get_tokenizer(embedding_model)
-                    logger.info(f"Using custom tokenizer from model: {embedding_model}")
+                    logger.info(f"Using custom tokenizer: {embedding_model}")
                 except Exception as e:
-                    logger.error(f"Failed to load tokenizer for model '{embedding_model}': {str(e)}")
+                    logger.error(f"❌ Failed to load tokenizer '{embedding_model}': {str(e)}")
                     raise HTTPException(
                         status_code=400,
                         detail=f"Invalid embedding model: {str(e)}"
                     )
-            else:
-                logger.info("Using HybridChunker's built-in tokenizer")
             
             # Chunk document with optional full metadata and table serialization
             chunks = hybrid_chunker.chunk_document(
@@ -151,16 +127,15 @@ async def parse_pdf_file(
                 for chunk in chunks
             ]
             
-            logger.info(f"Successfully generated {len(chunk_models)} chunks")
+            logger.info(f"✅ Generated {len(chunk_models)} chunks")
             
             return ParseResponse(
-                message="Document chunked successfully",
+                message=f"Document chunked successfully ({len(chunk_models)} chunks)",
                 status="success",
                 data=ChunkingData(chunks=chunk_models)
             )
         else:
             # Standard markdown parsing
-            logger.info("Starting PDF parsing with pre-initialized Docling converter...")
             parse_result = docling_parser.parse_pdf(pdf_content)
             
             if not parse_result["success"]:
@@ -169,9 +144,9 @@ async def parse_pdf_file(
                     detail=f"PDF parsing failed: {parse_result['error']}"
                 )
             
-            # Return successful parsing result
+            # Return successful result
             return ParseResponse(
-                message="PDF parsed successfully using pre-initialized converter",
+                message="PDF parsed successfully",
                 status="success",
                 content=parse_result["content"]
             )
@@ -179,7 +154,7 @@ async def parse_pdf_file(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error processing file: {str(e)}")
+        logger.error(f"❌ Error processing file: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
 

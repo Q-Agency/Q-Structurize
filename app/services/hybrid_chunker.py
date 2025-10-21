@@ -67,9 +67,9 @@ def _create_chunker(
             tokenizer_info = f"custom tokenizer (model: {tokenizer.name_or_path})"
         elif hasattr(tokenizer, '__class__'):
             tokenizer_info = f"custom tokenizer (type: {tokenizer.__class__.__name__})"
-        logger.info(f"Using {tokenizer_info}")
+        logger.debug(f"Using {tokenizer_info}")
     else:
-        logger.info("Using HybridChunker's built-in tokenizer")
+        logger.debug("Using HybridChunker's built-in tokenizer")
     
     chunker = HybridChunker(**chunker_params)
     logger.debug(f"HybridChunker initialized with max_tokens={max_tokens}, merge_peers={merge_peers}")
@@ -110,10 +110,6 @@ def _log_chunk_statistics(
     if chunks:
         avg_length = sum(len(c.get(text_field, '')) for c in chunks) / len(chunks)
         logger.info(f"Chunk statistics: avg_length={avg_length:.0f} chars")
-        
-        # For native chunks, show available fields
-        if is_native:
-            logger.info(f"Native chunk fields: {list(chunks[0].keys())[:10]}...")
 
 
 def extract_chunk_metadata(chunk: BaseChunk) -> Dict[str, Any]:
@@ -138,7 +134,6 @@ def extract_chunk_metadata(chunk: BaseChunk) -> Dict[str, Any]:
         
         if "table" in types:
             content_type = "table"
-            logger.debug(f"Chunk metadata: Detected table (doc_items types: {types})")
         elif "list_item" in types:
             content_type = "list"
         elif "section_header" in types:
@@ -161,17 +156,6 @@ def extract_chunk_metadata(chunk: BaseChunk) -> Dict[str, Any]:
     
     if page_numbers:
         metadata["pages"] = sorted(list(page_numbers))
-    
-    # Extract captions from tables and figures (commented out for now)
-    # captions = []
-    # if hasattr(chunk.meta, "doc_items") and chunk.meta.doc_items:
-    #     for item in chunk.meta.doc_items:
-    #         if hasattr(item, "label") and item.label == "table":
-    #             if hasattr(item, "captions") and item.captions:
-    #                 captions.extend(item.captions)
-    # 
-    # if captions:
-    #     metadata["captions"] = captions
     
     # Extract table data if present (simplified - just mark as table)
     if content_type == "table":
@@ -267,16 +251,14 @@ def chunk_document(
         # Handle table serialization if enabled
         final_text = prefixed_text
         if serialize_tables:
-            # Log if this is a table chunk
             if metadata.get("content_type") == "table":
-                logger.info(f"Chunk {chunk_idx}: Detected as table, attempting serialization")
                 # Serialize table from chunk's doc_items (pass document for reference resolution)
                 serialized = serialize_table_from_chunk(chunk, document=document)
                 if serialized:
                     # Use serialized table text instead of default text
                     final_text = f"search_document: {serialized}"
                     tables_serialized += 1
-                    logger.info(f"Chunk {chunk_idx}: Successfully serialized table")
+                    logger.debug(f"Chunk {chunk_idx}: Successfully serialized table")
                 else:
                     logger.warning(f"Chunk {chunk_idx}: Table detected but serialization failed, using default text")
         

@@ -13,9 +13,8 @@ import os
 import tempfile
 import logging
 import time
+import sys
 from typing import Optional, Dict, Any
-
-import logging, os, sys
 
 logger = logging.getLogger(__name__)
 # Only attach once to avoid duplicate logs on reload
@@ -75,10 +74,7 @@ except ImportError as e:
     ThreadedPdfPipelineOptions = None
     AcceleratorOptions = None
     AcceleratorDevice = None
-    import logging
-    logging.error(f"Failed to import docling: {e}")
-
-logger = logging.getLogger(__name__)
+    logger.error(f"Failed to import docling: {e}")
 
 
 class DoclingParser:
@@ -136,34 +132,16 @@ class DoclingParser:
         # Enable Docling's built-in pipeline profiling for detailed timing
         if settings:
             settings.debug.profile_pipeline_timings = True
-            logger.info("🔍 Docling pipeline profiling enabled")
+            logger.debug("🔍 Docling pipeline profiling enabled")
         
         # Create pipeline options with default configuration
         pipeline_options = self._create_pipeline_options(self.default_config)
         
         # CRITICAL: Initialize converter ONCE at startup
-        logger.info("============================================================")
         logger.info("🚀 Initializing Docling DocumentConverter (ONE-TIME SETUP)")
-        logger.info("⚙️  Configuration (from Dockerfile ENV):")
-        logger.info(f"   📊 Threading:")
-        logger.info(f"      - Threads: {pipeline_options.accelerator_options.num_threads} (OMP_NUM_THREADS)")
-        logger.info(f"      - Device: {pipeline_options.accelerator_options.device}")
-        logger.info(f"   🚀 Batching:")
-        logger.info(f"      - Layout Batch: {pipeline_options.layout_batch_size}")
-        logger.info(f"      - OCR Batch: {pipeline_options.ocr_batch_size}")
-        logger.info(f"      - Table Batch: {pipeline_options.table_batch_size}")
-        logger.info(f"      - Queue Max: {pipeline_options.queue_max_size}")
-        logger.info(f"      - Batch Timeout: {pipeline_options.batch_timeout_seconds}s")
-        logger.info(f"   📝 Features:")
-        ocr_status = '✅ Enabled' if pipeline_options.do_ocr else '❌ Disabled'
-        ocr_langs = f"({self.default_config['ocr_languages']})" if pipeline_options.do_ocr else ''
-        logger.info(f"      - OCR: {ocr_status} {ocr_langs}")
-        table_status = '✅ Enabled' if pipeline_options.do_table_structure else '❌ Disabled'
-        table_mode = f"({self.default_config['table_mode']})" if pipeline_options.do_table_structure else ''
-        logger.info(f"      - Tables: {table_status} {table_mode}")
-        logger.info(f"      - Code Enrichment: {'✅' if pipeline_options.do_code_enrichment else '❌'}")
-        logger.info(f"      - Formula Enrichment: {'✅' if pipeline_options.do_formula_enrichment else '❌'}")
-        logger.info(f"      - Picture Classification: {'✅' if pipeline_options.do_picture_classification else '❌'}")
+        logger.info(f"⚙️  Threads: {pipeline_options.accelerator_options.num_threads}, Device: {pipeline_options.accelerator_options.device}")
+        table_status = 'Enabled' if pipeline_options.do_table_structure else 'Disabled'
+        logger.info(f"📝 Tables: {table_status}, OCR: {'Enabled' if pipeline_options.do_ocr else 'Disabled'}")
         
         init_start = time.time()
         
@@ -177,13 +155,10 @@ class DoclingParser:
         )
         
         # Pre-initialize the pipeline (loads models into memory)
-        logger.info("📦 Pre-loading models into memory...")
         self.converter.initialize_pipeline(InputFormat.PDF)
         
         init_time = time.time() - init_start
-        logger.info(f"✅ Converter initialized in {init_time:.2f} seconds")
-        logger.info("📝 Models are now cached in memory for fast processing")
-        logger.info("============================================================")
+        logger.info(f"✅ Converter initialized in {init_time:.2f}s (models cached in memory)")
     
     def _create_pipeline_options(self, user_options: Dict[str, Any]) -> ThreadedPdfPipelineOptions:
         """
@@ -226,8 +201,6 @@ class DoclingParser:
             num_threads=user_options.get("num_threads", 120),
             device=device
         )
-
-
         
         # Enrichment options
         pipeline_options.do_code_enrichment = user_options.get("do_code_enrichment", False)
@@ -242,14 +215,6 @@ class DoclingParser:
         pipeline_options.queue_max_size = user_options.get("queue_max_size", 1000)
         pipeline_options.batch_timeout_seconds = user_options.get("batch_timeout_seconds", 0.5)
         
-        logger.info(
-            "Docling accelerator: device=%s, threads=%s | layout_batch=%s, table_batch=%s",
-            pipeline_options.accelerator_options.device,
-            pipeline_options.accelerator_options.num_threads,
-            pipeline_options.layout_batch_size,
-            pipeline_options.table_batch_size,
-        )
-
         return pipeline_options
     
     def parse_pdf(self, pdf_content: bytes) -> Dict[str, Any]:
@@ -267,55 +232,31 @@ class DoclingParser:
             }
         
         try:
-            # Log start
-            logger.info("============================================================")
-            logger.info("📄 Starting PDF parsing with pre-initialized converter")
-            logger.info("------------------------------------------------------------")
-            
             # Create temporary file for PDF content
             file_write_start = time.time()
             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
                 tmp_file.write(pdf_content)
                 tmp_file.flush()
                 file_write_time = time.time() - file_write_start
-                logger.info(f"⏱️  Temp file write: {file_write_time:.3f}s")
                 
                 # Parse the PDF using pre-initialized converter
-                logger.info("⏳ Processing document...")
-                logger.info("   └─ Step 1: Document conversion (layout analysis, OCR, tables)")
+                logger.info(f"📄 Processing PDF ({len(pdf_content):,} bytes)")
                 processing_start = time.time()
                 
                 # CRITICAL: Reuse the pre-initialized converter
-                # This will trigger Docling's internal profiling logs
                 result = self.converter.convert(source=tmp_file.name)
-                
                 conversion_time = time.time() - processing_start
-                logger.info(f"   ✅ Conversion complete: {conversion_time:.3f}s")
                 
                 # Extract content - export to markdown
-                logger.info("   └─ Step 2: Export to markdown")
                 export_start = time.time()
                 document = result.document
                 markdown_content = document.export_to_markdown()
                 export_time = time.time() - export_start
-                logger.info(f"   ✅ Export complete: {export_time:.3f}s")
                 
                 total_time = time.time() - processing_start
                 
-                # Detailed timing breakdown
-                logger.info("📊 Performance Breakdown:")
-                logger.info(f"   ├─ File I/O:        {file_write_time:.3f}s ({file_write_time/total_time*100:.1f}%)")
-                logger.info(f"   ├─ Conversion:      {conversion_time:.3f}s ({conversion_time/total_time*100:.1f}%)")
-                logger.info(f"   │   └─ (Check logs above for Docling's detailed pipeline timings)")
-                logger.info(f"   ├─ Markdown Export: {export_time:.3f}s ({export_time/total_time*100:.1f}%)")
-                logger.info(f"   └─ TOTAL:           {total_time:.3f}s")
-                
-                # Document statistics
-                logger.info(f"📄 Document Statistics:")
-                logger.info(f"   ├─ Content size:    {len(markdown_content):,} characters")
-                logger.info(f"   ├─ Input size:      {len(pdf_content):,} bytes")
-                logger.info(f"   └─ Throughput:      {len(markdown_content)/total_time:.0f} chars/sec")
-                logger.info("============================================================")
+                # Log summary
+                logger.info(f"✅ Parsed in {total_time:.2f}s: {len(markdown_content):,} chars ({len(markdown_content)/total_time:.0f} chars/sec)")
                 
                 # Clean up temporary file
                 try:
@@ -371,7 +312,7 @@ class DoclingParser:
                 tmp_file.flush()
                 tmp_path = tmp_file.name
                 
-                logger.info(f"Parsing PDF to document object (size: {len(pdf_content):,} bytes)")
+                logger.debug(f"Parsing PDF to document object (size: {len(pdf_content):,} bytes)")
                 
                 # Convert using pre-initialized converter
                 result = self.converter.convert(source=tmp_path)

@@ -16,6 +16,7 @@ USAGE:
 """
 
 import logging
+import os
 from typing import Optional, Any
 from functools import lru_cache
 import threading
@@ -43,7 +44,7 @@ class TokenizerManager:
         """
         self.cache_size = cache_size
         self._load_tokenizer_cached = lru_cache(maxsize=cache_size)(self._load_tokenizer)
-        logger.info(f"TokenizerManager initialized with cache_size={cache_size}")
+        logger.debug(f"TokenizerManager initialized with cache_size={cache_size}")
     
     def _load_tokenizer(self, model_name: str) -> Any:
         """
@@ -63,28 +64,28 @@ class TokenizerManager:
             from transformers import AutoTokenizer
         except ImportError:
             raise ImportError(
-                "transformers library is required for custom tokenizers. "
-                "Install with: pip install transformers"
+                "transformers library is required. Install with: pip install transformers"
             )
         
         with _tokenizer_lock:
-            logger.info(f"Loading tokenizer from HuggingFace: {model_name}")
+            logger.info(f"Loading tokenizer: {model_name}")
             
             try:
-                # Load tokenizer from HuggingFace
+                # Use environment variable or default cache directory
+                cache_dir = os.environ.get('HF_CACHE_DIR', './cache/huggingface')
+                
                 tokenizer = AutoTokenizer.from_pretrained(
                     model_name,
-                    cache_dir="/Users/zmatokanovic/development/QStructurize/cache/huggingface"
+                    cache_dir=cache_dir
                 )
-                logger.info(f"Successfully loaded tokenizer: {model_name}")
+                logger.info(f"✅ Tokenizer loaded: {model_name}")
                 return tokenizer
                 
             except Exception as e:
-                logger.error(f"Failed to load tokenizer '{model_name}': {str(e)}")
+                logger.error(f"❌ Failed to load tokenizer '{model_name}': {str(e)}")
                 raise ValueError(
-                    f"Failed to load tokenizer '{model_name}'. "
-                    f"Error: {str(e)}. "
-                    f"Please ensure the model name is correct and available on HuggingFace."
+                    f"Failed to load tokenizer '{model_name}': {str(e)}. "
+                    f"Ensure the model exists on HuggingFace."
                 )
     
     def get_tokenizer(self, model_name: str) -> Any:
@@ -110,16 +111,13 @@ class TokenizerManager:
         model_name = model_name.strip()
         
         if not model_name:
-            raise ValueError("Model name cannot be empty or whitespace")
+            raise ValueError("Model name cannot be empty")
         
         if len(model_name) > 200:
-            raise ValueError("Model name is too long (max 200 characters)")
+            raise ValueError("Model name too long (max 200 chars)")
         
-        # Check for obviously invalid patterns
         if model_name.startswith('/') or model_name.endswith('/'):
-            raise ValueError("Model name cannot start or end with '/'")
-        
-        logger.debug(f"Requesting tokenizer: {model_name}")
+            raise ValueError("Invalid model name format")
         
         # Load from cache or fetch new
         return self._load_tokenizer_cached(model_name)

@@ -37,7 +37,7 @@ class PDFOptimizer:
         original_size = len(binary_data)
         
         if not PDF_OPTIMIZATION_AVAILABLE:
-            logger.warning("PDF optimization requested but pikepdf is not available. Using original PDF.")
+            logger.debug("pikepdf not available, skipping optimization")
             size_info = {
                 "original_size_bytes": original_size,
                 "optimized_size_bytes": original_size,
@@ -46,7 +46,6 @@ class PDFOptimizer:
             }
             return binary_data, size_info
         
-        logger.info("Starting PDF optimization")
         start_time = time.time()
         
         try:
@@ -93,11 +92,12 @@ class PDFOptimizer:
                 os.unlink(tmp_in.name)
                 os.unlink(tmp_out.name)
                 
-                logger.info(f"PDF successfully optimized. Size: {original_size} -> {optimized_size} bytes ({size_reduction_percentage:.2f}% reduction)")
+                optimization_time = time.time() - start_time
+                logger.info(f"✅ PDF optimized in {optimization_time:.2f}s: {original_size:,} → {optimized_size:,} bytes ({size_reduction_percentage:.1f}% reduction)")
                 return optimized_data, size_info
                 
         except Exception as e:
-            logger.error(f"Error during PDF optimization: {str(e)}. Using original PDF.")
+            logger.warning(f"⚠️  PDF optimization failed: {str(e)}, using original")
             size_info = {
                 "original_size_bytes": original_size,
                 "optimized_size_bytes": original_size,
@@ -106,9 +106,6 @@ class PDFOptimizer:
                 "error": str(e)
             }
             return binary_data, size_info
-        finally:
-            optimization_time = time.time() - start_time
-            logger.info(f"PDF optimization completed in {optimization_time:.2f} seconds")
     
     @staticmethod
     def is_optimization_available() -> bool:
