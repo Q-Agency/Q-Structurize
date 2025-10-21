@@ -1,0 +1,55 @@
+version: "3.8"
+
+services:
+  q-structurize:
+    shm_size: "8g"
+    tmpfs:
+      - /dev/shm:size=8g,mode=1777
+      - /tmp:size=8g,mode=1777
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: q-structurize:cpu
+    container_name: q-structurize
+    ports:
+      - "8878:8000"
+
+    # Persist data and caches to avoid re-downloading models
+    volumes:
+      - ./uploads:/app/uploads
+      - docling_models:/root/.cache/docling/models
+      - hf_cache:/app/.cache/huggingface
+
+    environment:
+      - PYTHONPATH=/app
+      - DOCLING_ACCELERATOR_DEVICE=cpu
+      # Force CPU-only
+      - CUDA_VISIBLE_DEVICES=""
+
+    restart: unless-stopped
+
+    # CPU resources
+    deploy:
+      resources:
+        limits:
+          memory: 64G
+          cpus: '72'
+
+    # Healthcheck
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+volumes:
+  docling_models:
+  hf_cache:
+

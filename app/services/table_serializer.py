@@ -89,19 +89,25 @@ def extract_table_from_doc_items(doc_items: List[Any]) -> Optional[Dict[str, Any
             
         found_table = True
         
+        # Debug: Log what attributes the table item has
+        logger.debug(f"Found table item with attributes: {[attr for attr in dir(item) if not attr.startswith('_')][:20]}")
+        
         # Extract caption if available
         if hasattr(item, 'captions') and item.captions:
             # Join multiple captions with space
             table_data['caption'] = ' '.join(str(cap) for cap in item.captions)
+            logger.debug(f"Table caption: {table_data['caption']}")
         
         # Try to extract structured table data
         if hasattr(item, 'data') and item.data is not None:
             # Docling's TableData structure
             table_obj = item.data
+            logger.debug(f"Table data type: {type(table_obj)}, attributes: {[attr for attr in dir(table_obj) if not attr.startswith('_')][:15]}")
             
             # Extract grid data if available
             if hasattr(table_obj, 'grid'):
                 grid = table_obj.grid
+                logger.debug(f"Found grid structure")
                 
                 # Try to parse grid into rows
                 if hasattr(grid, 'export_to_list'):
@@ -145,12 +151,26 @@ def extract_table_from_doc_items(doc_items: List[Any]) -> Optional[Dict[str, Any
     if not found_table:
         return None
         
-    # If we couldn't extract structured data, try to parse markdown
+    # If we couldn't extract structured data, try parsing fallbacks
     if not table_data['headers'] and table_data['markdown']:
+        logger.debug(f"Attempting to parse table text (length: {len(table_data['markdown'])} chars)")
+        
+        # Try standard markdown table parser first
         parsed = _parse_markdown_table(table_data['markdown'])
         if parsed:
+            logger.debug("Successfully parsed as markdown table")
             table_data['headers'] = parsed.get('headers')
             table_data['rows'] = parsed.get('rows', [])
+        else:
+            # Try Docling's text-based format parser
+            logger.debug("Markdown parser failed, trying text-based parser")
+            parsed = _parse_docling_text_table(table_data['markdown'])
+            if parsed:
+                logger.debug("Successfully parsed as text-based table")
+                table_data['headers'] = parsed.get('headers')
+                table_data['rows'] = parsed.get('rows', [])
+            else:
+                logger.debug("All parsers failed, will use raw text fallback")
     
     return table_data
 
@@ -242,6 +262,97 @@ def _parse_markdown_table(markdown: str) -> Optional[Dict[str, Any]]:
         
     except Exception as e:
         logger.debug(f"Error parsing markdown table: {e}")
+        return None
+
+
+def _parse_docling_text_table(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse Docling's text-based table format.
+    
+    Docling sometimes exports tables as prose text with patterns like:
+    "Column1 = Value1. Column2 = Value2. Column1 = Value3. Column2 = Value4."
+    or
+    "Column1: Value1, Column2: Value2. Column1: Value3, Column2: Value4."
+    
+    This parser extracts these patterns and reconstructs the table structure.
+    
+    Args:
+        text: Text representation of table from Docling
+        
+    Returns:
+        Dictionary with 'headers' and 'rows' keys, or None if parsing fails
+        
+    Example:
+        >>> text = "Name = John, Age = 30. Name = Jane, Age = 25."
+        >>> parsed = _parse_docling_text_table(text)
+        >>> print(parsed['headers'])  # ['Age', 'Name']
+        >>> print(parsed['rows'])     # [['30', 'John'], ['25', 'Jane']]
+    """
+    import re
+    
+    if not text or len(text.strip()) < 5:
+        return None
+    
+    try:
+        # Split by periods first to get potential rows
+        # Handle both ". " and ".\n" as row separators
+        segments = re.split(r'\.\s+|\.\n', text)
+        
+        rows = []
+        all_headers = set()
+        
+        for segment in segments:
+            if not segment.strip():
+                continue
+            
+            row_data = {}
+            
+            # Try to extract key=value or key: value patterns
+            # Pattern 1: "Key = Value" or "Key=Value"
+            pairs_eq = re.findall(r'([^,=:\.]+?)\s*=\s*([^,=:\.]+?)(?=\s*,|\s*$)', segment)
+            
+            # Pattern 2: "Key: Value" or "Key : Value"
+            pairs_colon = re.findall(r'([^,=:\.]+?)\s*:\s*([^,=:\.]+?)(?=\s*,|\s*\.|$)', segment)
+            
+            # Use whichever pattern found more matches
+            pairs = pairs_eq if len(pairs_eq) >= len(pairs_colon) else pairs_colon
+            
+            for key, value in pairs:
+                key = key.strip()
+                value = value.strip()
+                
+                # Clean up bullet points and special chars
+                key = re.sub(r'^[•\-\*]\s*', '', key)
+                value = re.sub(r'^[•\-\*]\s*', '', value)
+                
+                if key and value and len(key) < 100:  # Sanity check
+                    all_headers.add(key)
+                    row_data[key] = value
+            
+            if row_data:
+                rows.append(row_data)
+        
+        if not rows or not all_headers:
+            logger.debug("Could not extract structured data from text table")
+            return None
+        
+        # Convert to consistent format with sorted headers
+        headers_list = sorted(list(all_headers))
+        rows_list = []
+        
+        for row_data in rows:
+            row = [row_data.get(h, '') for h in headers_list]
+            rows_list.append(row)
+        
+        logger.debug(f"Parsed text table: {len(headers_list)} columns, {len(rows_list)} rows")
+        
+        return {
+            'headers': headers_list,
+            'rows': rows_list
+        }
+        
+    except Exception as e:
+        logger.debug(f"Error parsing text-based table: {e}")
         return None
 
 

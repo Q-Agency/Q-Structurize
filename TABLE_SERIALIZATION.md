@@ -180,9 +180,27 @@ The serialized format provides better semantic representation for embedding mode
 This implementation is designed for Docling 2.57.0 and handles:
 
 - **TableData structures**: Extracts grid/cells from Docling's internal format
-- **Multiple fallbacks**: Grid cells → Markdown → Text representation
+- **Multiple fallbacks**: Grid cells → Markdown table → Text-based format → Raw text
+- **Text-based table parsing**: NEW! Handles Docling's prose-style table exports (e.g., "Column = Value, Column2 = Value2")
 - **Caption extraction**: From item.captions attribute
 - **Robust parsing**: Handles various table structures gracefully
+- **Debug logging**: Comprehensive logging to troubleshoot table extraction
+
+### Parser Chain
+
+The serializer tries multiple approaches in order:
+
+1. **Structured grid data** - Direct extraction from Docling's TableData.grid
+2. **Markdown table parser** - For tables with `| Header |` format
+3. **Text-based parser** - NEW! For prose-style tables like:
+   ```
+   Column1 = Value1, Column2 = Value2. Column1 = Value3, Column2 = Value4.
+   ```
+   or
+   ```
+   Column1: Value1, Column2: Value2. Column1: Value3, Column2: Value4.
+   ```
+4. **Raw text fallback** - If all parsers fail, returns cleaned text
 
 ## Configuration
 
@@ -238,17 +256,72 @@ Potential improvements for future versions:
 4. **Custom formatters**: Plugin system for custom serialization formats
 5. **Hierarchical tables**: Special handling for nested/hierarchical table structures
 
+## Troubleshooting
+
+### Enable Debug Logging
+
+To see detailed information about table parsing:
+
+```bash
+# In your environment or Dockerfile
+LOG_LEVEL=DEBUG
+```
+
+This will show:
+- Which table items are found
+- What parsers are being tried
+- Whether parsing succeeded or failed
+- Table structure details
+
+### Common Issues
+
+**Issue: Tables not being serialized**
+- Check logs for "Found table item" messages
+- Verify `serialize_tables=True` is passed to `chunk_document()`
+- Ensure `DOCLING_DO_TABLE_STRUCTURE=true` in environment
+
+**Issue: Getting raw text instead of key-value format**
+- Check debug logs for parser attempts
+- The text-based parser looks for patterns like "Column = Value" or "Column: Value"
+- If your tables don't match these patterns, raw text fallback is used
+
+**Issue: Missing columns or rows**
+- Text-based parser splits on periods (`.`) to identify rows
+- Values with periods might be split incorrectly
+- Check logs for "Parsed text table: X columns, Y rows" to verify extraction
+
+### Example Debug Output
+
+```
+DEBUG - Found table item with attributes: ['captions', 'data', 'export_to_markdown', 'label', 'text', ...]
+DEBUG - Table caption: Project Timeline
+DEBUG - Attempting to parse table text (length: 856 chars)
+DEBUG - Markdown parser failed, trying text-based parser
+DEBUG - Parsed text table: 2 columns, 4 rows
+DEBUG - Serialized table chunk 5 for embedding
+```
+
 ## Support
 
 For questions or issues:
+- Enable DEBUG logging to see detailed parser information
 - Check logs for table serialization debug messages
 - Verify `DOCLING_DO_TABLE_STRUCTURE=true` is set
 - Ensure Docling 2.57.0 is installed: `pip list | grep docling`
+- Share debug logs for troubleshooting
 
 ## Version History
+
+- **v1.1** (2025-10-21): Text-based table parser
+  - Added `_parse_docling_text_table()` for prose-style tables
+  - Handles "Column = Value" and "Column: Value" patterns
+  - Enhanced debug logging throughout parser chain
+  - Better fallback handling for various table formats
 
 - **v1.0** (2025-10-21): Initial implementation
   - Key-value serialization format
   - Integration with hybrid_chunker
   - Docling 2.57.0 support
+  - Markdown table parser
+  - Grid structure extraction
 
