@@ -255,9 +255,9 @@ def chunk_document(
                 # Serialize table from chunk's doc_items (pass document for reference resolution)
                 serialized = serialize_table_from_chunk(chunk, document=document)
                 if serialized:
-                    # Include section title with serialized table
+                    # Include section title with serialized table (with blank line for readability)
                     if section_title:
-                        final_text = f"search_document: {section_title}\n{serialized}"
+                        final_text = f"search_document: {section_title}\n\n{serialized}"
                     else:
                         final_text = f"search_document: {serialized}"
                     tables_serialized += 1
