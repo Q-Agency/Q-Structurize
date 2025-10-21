@@ -69,7 +69,8 @@ async def parse_pdf_file(
     merge_peers: bool = Form(True, description="Merge undersized successive chunks with same headings"),
     embedding_model: Optional[str] = Form(None, description="HuggingFace embedding model name for tokenization (e.g., 'sentence-transformers/all-MiniLM-L6-v2'). If not specified, uses HybridChunker's built-in tokenizer"),
     include_markdown: bool = Form(False, description="Include full markdown content when chunking is enabled"),
-    include_full_metadata: bool = Form(False, description="Include complete Docling metadata (model_dump) in addition to curated metadata")
+    include_full_metadata: bool = Form(False, description="Include complete Docling metadata (model_dump) in addition to curated metadata"),
+    serialize_tables: bool = Form(False, description="Serialize table chunks as key-value pairs optimized for embeddings (extracts tables from document structure)")
 ):
     # Validate file type
     if not file.content_type or not file.content_type.startswith('application/pdf'):
@@ -107,7 +108,7 @@ async def parse_pdf_file(
         # Branch: Chunking vs Standard Markdown
         if enable_chunking:
             metadata_mode = "full" if include_full_metadata else "curated"
-            logger.info(f"Starting PDF parsing with chunking (metadata={metadata_mode}, max_tokens={max_tokens_per_chunk}, merge_peers={merge_peers})...")
+            logger.info(f"Starting PDF parsing with chunking (metadata={metadata_mode}, max_tokens={max_tokens_per_chunk}, merge_peers={merge_peers}, serialize_tables={serialize_tables})...")
             
             # Parse to DoclingDocument object
             document = docling_parser.parse_pdf_to_document(pdf_content)
@@ -128,13 +129,14 @@ async def parse_pdf_file(
             else:
                 logger.info("Using HybridChunker's built-in tokenizer")
             
-            # Chunk document with optional full metadata
+            # Chunk document with optional full metadata and table serialization
             chunks = hybrid_chunker.chunk_document(
                 document=document,
                 max_tokens=max_tokens_per_chunk,
                 merge_peers=merge_peers,
                 tokenizer=tokenizer,
-                include_full_metadata=include_full_metadata
+                include_full_metadata=include_full_metadata,
+                serialize_tables=serialize_tables
             )
             
             # Convert chunk dicts to ChunkData models
@@ -195,6 +197,7 @@ async def root():
             "Pre-initialized Docling converter for instant processing",
             "Layout analysis and document structure extraction",
             "Hybrid chunking with native merge_peers for RAG",
+            "Table serialization for embeddings (key-value format)",
             "Custom embedding model tokenizers (any HuggingFace model)",
             "Batched processing with ThreadedPdfPipelineOptions",
             "ENV-based configuration (modify Dockerfile and rebuild)",
