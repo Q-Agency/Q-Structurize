@@ -1,13 +1,13 @@
 """
 Table serialization helper for Docling 2.57.0
 
-This module extracts tables directly from DoclingDocument structure and
-serializes them into embedding-optimized text format.
+This module extracts tables from chunk.meta.doc_items and serializes them
+into embedding-optimized text format.
 
 ARCHITECTURE:
-- Extract tables from document.body.iterate_items() BEFORE chunking
-- Access TableData.grid directly for structured data
-- No text parsing - work with native Docling structures
+- Tables are accessed from chunks (HybridChunker already extracts them)
+- Each chunk has chunk.meta.doc_items containing table references
+- Access TableData directly from doc_items
 - Serialize to key-value format optimized for embeddings
 
 SERIALIZATION FORMAT:
@@ -17,26 +17,24 @@ SERIALIZATION FORMAT:
 - Optimized for semantic search and embedding models
 
 USAGE:
-    from app.services.table_serializer import extract_tables_from_document
+    from app.services.table_serializer import serialize_table_from_chunk
     
-    # Extract tables from document
-    document = parser.parse_pdf_to_document(pdf_content)
-    tables = extract_tables_from_document(document)
-    
-    # Use in chunking
-    chunks = chunk_document(document, serialize_tables=True)
+    # In chunking workflow
+    for chunk in chunker.chunk(document):
+        if chunk contains table:
+            serialized_text = serialize_table_from_chunk(chunk)
 """
 
 import logging
 from typing import List, Dict, Any, Optional
-from docling_core.types.doc.document import DoclingDocument
+from docling_core.transforms.chunker import BaseChunk
 
 logger = logging.getLogger(__name__)
 
 # Export public API
 __all__ = [
-    'extract_tables_from_document',
-    'serialize_table_item',
+    'serialize_table_from_chunk',
+    'extract_table_structure',
     'format_table_as_keyvalue',
 ]
 
@@ -51,7 +49,7 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
         table_data: TableData object from item.data
         
     Returns:
-        Dictionary with 'headers', 'rows', and 'grid' information
+        Dictionary with 'headers', 'rows', and grid information
         Returns None if extraction fails
     """
     if not table_data:
@@ -157,7 +155,7 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
                 logger.debug(f"export_to_markdown failed: {e}")
         
     except Exception as e:
-        logger.warning(f"Failed to extract table structure: {e}", exc_info=True)
+        logger.warning(f"Failed to extract table structure: {e}")
     
     return result if result['headers'] or result['rows'] else None
 
@@ -215,33 +213,60 @@ def format_table_as_keyvalue(
     return '\n'.join(lines)
 
 
-def serialize_table_item(item: Any) -> Optional[str]:
+def serialize_table_from_chunk(chunk: BaseChunk) -> Optional[str]:
     """
-    Serialize a single table item from document.body.iterate_items().
+    Serialize table from a chunk's doc_items.
     
-    Extracts table structure and formats as key-value pairs.
+    This is the main entry point for table serialization. HybridChunker
+    already extracts tables and includes them in chunk.meta.doc_items.
+    We access that data and re-serialize it to key-value format.
     
     Args:
-        item: Table item from DoclingDocument
+        chunk: BaseChunk object from HybridChunker
         
     Returns:
-        Serialized table text, or None if extraction fails
+        Serialized table text in key-value format, or None if no table found
+        
+    Example:
+        >>> for chunk in chunker.chunk(document):
+        ...     if has_table(chunk):
+        ...         serialized = serialize_table_from_chunk(chunk)
+        ...         if serialized:
+        ...             print(serialized)
     """
-    if not hasattr(item, 'label') or item.label != 'table':
+    if not hasattr(chunk, 'meta') or not hasattr(chunk.meta, 'doc_items'):
+        logger.debug("Chunk has no doc_items")
         return None
+    
+    # Find table items in doc_items
+    table_item = None
+    for item in chunk.meta.doc_items:
+        if hasattr(item, 'label') and item.label == 'table':
+            table_item = item
+            break
+    
+    if not table_item:
+        logger.debug("No table found in chunk doc_items")
+        return None
+    
+    logger.debug(f"Found table item in chunk")
     
     # Extract caption
     caption = None
-    if hasattr(item, 'captions') and item.captions:
-        caption = ' '.join(str(cap) for cap in item.captions)
+    if hasattr(table_item, 'captions') and table_item.captions:
+        caption = ' '.join(str(cap) for cap in table_item.captions)
+        logger.debug(f"Table caption: {caption}")
     
-    # Extract table structure
+    # Extract table structure from item.data
     table_struct = None
-    if hasattr(item, 'data') and item.data:
-        table_struct = extract_table_structure(item.data)
+    if hasattr(table_item, 'data') and table_item.data:
+        logger.debug(f"Extracting table structure from item.data")
+        table_struct = extract_table_structure(table_item.data)
+    else:
+        logger.debug("Table item has no data attribute")
     
     if not table_struct or not table_struct.get('headers'):
-        logger.debug("Could not extract table structure, skipping serialization")
+        logger.debug("Could not extract table structure")
         return None
     
     # Format as key-value pairs
@@ -251,85 +276,6 @@ def serialize_table_item(item: Any) -> Optional[str]:
         caption=caption
     )
     
-    logger.debug(f"Serialized table: {len(table_struct['rows'])} rows, caption='{caption}'")
+    logger.debug(f"Serialized table: {len(table_struct['rows'])} rows, {len(table_struct['headers'])} columns")
     
     return serialized
-
-
-def extract_tables_from_document(document: DoclingDocument) -> List[Dict[str, Any]]:
-    """
-    Extract all tables from DoclingDocument structure.
-    
-    Iterates through document.body to find table items and extracts
-    their structured data directly (no text parsing).
-    
-    Args:
-        document: DoclingDocument from Docling parser
-        
-    Returns:
-        List of dictionaries with table information:
-        {
-            'caption': str,
-            'serialized_text': str,
-            'headers': List[str],
-            'num_rows': int,
-            'item': original table item (for matching with chunks)
-        }
-        
-    Example:
-        >>> document = parser.parse_pdf_to_document(pdf_content)
-        >>> tables = extract_tables_from_document(document)
-        >>> for table in tables:
-        ...     print(f"Table: {table['caption']}")
-        ...     print(table['serialized_text'])
-    """
-    tables = []
-    
-    if not hasattr(document, 'body'):
-        logger.warning("Document has no body attribute")
-        return tables
-    
-    if not hasattr(document.body, 'iterate_items'):
-        logger.warning("Document body has no iterate_items method")
-        return tables
-    
-    logger.info("Extracting tables from document...")
-    
-    try:
-        for item, level in document.body.iterate_items():
-            if hasattr(item, 'label') and item.label == 'table':
-                logger.debug(f"Found table at level {level}")
-                
-                # Serialize the table
-                serialized = serialize_table_item(item)
-                
-                if serialized:
-                    # Extract additional metadata
-                    caption = None
-                    if hasattr(item, 'captions') and item.captions:
-                        caption = ' '.join(str(cap) for cap in item.captions)
-                    
-                    # Get structure info
-                    table_struct = None
-                    if hasattr(item, 'data') and item.data:
-                        table_struct = extract_table_structure(item.data)
-                    
-                    tables.append({
-                        'caption': caption,
-                        'serialized_text': serialized,
-                        'headers': table_struct.get('headers') if table_struct else None,
-                        'num_rows': len(table_struct.get('rows', [])) if table_struct else 0,
-                        'item': item,  # Keep reference for matching with chunks
-                        'level': level,
-                    })
-                    
-                    logger.info(f"Extracted table: caption='{caption}', rows={tables[-1]['num_rows']}")
-                else:
-                    logger.debug("Table serialization failed, skipping")
-    
-    except Exception as e:
-        logger.error(f"Error extracting tables from document: {e}", exc_info=True)
-    
-    logger.info(f"Extracted {len(tables)} tables from document")
-    
-    return tables

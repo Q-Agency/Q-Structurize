@@ -25,7 +25,7 @@ from typing import List, Dict, Any, Optional, Set
 from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling_core.transforms.chunker import BaseChunk
 from docling_core.types.doc.document import DoclingDocument
-from app.services.table_serializer import extract_tables_from_document
+from app.services.table_serializer import serialize_table_from_chunk
 
 logger = logging.getLogger(__name__)
 
@@ -244,35 +244,11 @@ def chunk_document(
     logger.info(f"Starting document chunking: max_tokens={max_tokens}, merge_peers={merge_peers}, serialize_tables={serialize_tables}")
     start_time = time.time()
     
-    # Extract tables from document BEFORE chunking if serialization is enabled
-    extracted_tables = []
-    table_texts = {}  # Map from table text to serialized version
-    
-    if serialize_tables:
-        logger.info("Extracting tables from document structure...")
-        table_extract_start = time.time()
-        extracted_tables = extract_tables_from_document(document)
-        table_extract_time = time.time() - table_extract_start
-        
-        logger.info(f"Extracted {len(extracted_tables)} tables in {table_extract_time:.2f}s")
-        
-        # Build mapping from table item to serialized text for later matching
-        for table_info in extracted_tables:
-            item = table_info['item']
-            serialized = table_info['serialized_text']
-            
-            # Get original text representation to use as key
-            if hasattr(item, 'text'):
-                orig_text = item.text
-                # Store first 200 chars as key (enough to match)
-                table_texts[orig_text[:200]] = serialized
-            
-            logger.debug(f"Table mapping created: {table_info.get('caption', 'no caption')}")
-    
     # Initialize chunker (shared logic)
     chunker = _create_chunker(max_tokens, merge_peers, tokenizer)
     
     chunks = []
+    tables_serialized = 0
     
     # Process document with HybridChunker
     for chunk_idx, chunk in enumerate(chunker.chunk(document)):
@@ -290,23 +266,15 @@ def chunk_document(
         # Handle table serialization if enabled
         final_text = prefixed_text
         if serialize_tables and metadata.get("content_type") == "table":
-            # Try to match this chunk to a pre-extracted table
-            matched = False
-            
-            # Get chunk's raw text for matching
-            chunk_raw_text = chunk.text if hasattr(chunk, 'text') else contextualized_text
-            
-            # Try to find matching serialized table
-            for text_key, serialized in table_texts.items():
-                # Check if this chunk contains part of the table
-                if text_key in chunk_raw_text or chunk_raw_text[:200] in text_key:
-                    final_text = f"search_document: {serialized}"
-                    matched = True
-                    logger.debug(f"Matched and serialized table chunk {chunk_idx}")
-                    break
-            
-            if not matched:
-                logger.debug(f"Table chunk {chunk_idx} could not be matched to extracted tables")
+            # Serialize table from chunk's doc_items
+            serialized = serialize_table_from_chunk(chunk)
+            if serialized:
+                # Use serialized table text instead of default text
+                final_text = f"search_document: {serialized}"
+                tables_serialized += 1
+                logger.debug(f"Serialized table chunk {chunk_idx}")
+            else:
+                logger.debug(f"Table chunk {chunk_idx} could not be serialized, using default text")
         
         # Create chunk data dictionary
         chunk_data = {
@@ -327,6 +295,10 @@ def chunk_document(
     
     # Log statistics (shared logic)
     _log_chunk_statistics(chunks, start_time, text_field="text", is_native=False)
+    
+    # Log table serialization results
+    if serialize_tables:
+        logger.info(f"Table serialization: {tables_serialized} tables successfully serialized")
     
     return chunks
 

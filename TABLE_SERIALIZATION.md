@@ -1,32 +1,26 @@
-# Table Serialization for Embeddings - v2.0
+# Table Serialization for Embeddings
 
 ## Overview
 
-Table serialization for Docling 2.57.0 that extracts tables **directly from DoclingDocument structure** and converts them into embedding-optimized text format. This approach is more reliable than text parsing as it accesses structured table data before it's flattened by the chunker.
+Table serialization for Docling 2.57.0 that extracts tables from **chunk.meta.doc_items** (after HybridChunker processes the document) and converts them into embedding-optimized text format.
 
-## New Architecture (v2.0)
+## Architecture
 
-### Extraction Flow
+### How It Works
 
 ```
-PDF → DoclingDocument → Extract Tables (structured) → Serialize → Match to Chunks
-              ↓
-      document.body.iterate_items()
-      Access TableData.grid directly
+PDF → DoclingDocument → HybridChunker → Chunks (with tables in doc_items)
+                                            ↓
+                                    Serialize tables from chunk.meta.doc_items
+                                            ↓
+                                    Key-value format for embeddings
 ```
 
-**Key Improvements:**
-- ✅ Extract tables from `document.body.iterate_items()` BEFORE chunking
-- ✅ Access `TableData.grid` directly for structured data
-- ✅ No text parsing - work with native Docling structures
-- ✅ More reliable and maintainable
-
-### Files
-
-1. **`app/services/table_serializer.py`** - Core table extraction and serialization
-2. **`app/services/document_inspector.py`** - Debug utilities to inspect document structure
-3. **`app/services/hybrid_chunker.py`** - Integration with chunking workflow
-4. **`test_document_tables.py`** - Test script to verify extraction
+**Key Points:**
+- HybridChunker already extracts tables during chunking
+- Tables are accessible via `chunk.meta.doc_items`
+- We re-serialize them to key-value format for embeddings
+- No pre-processing needed - work with chunks directly
 
 ## Features
 
@@ -43,7 +37,7 @@ Region: East, Q1: 110, Q2: 160
 
 ### Key Characteristics
 
-- **Direct structure access**: Extract from DoclingDocument.body, not chunk text
+- **Chunk-level extraction**: Access tables from chunk.meta.doc_items
 - **Entire table as one chunk**: Not split per-row
 - **Key-value format**: "Column1: Value1, Column2: Value2, ..."
 - **Caption inclusion**: Table captions prefixed (if available)
@@ -75,63 +69,52 @@ for chunk in chunks:
         # Output: search_document: Table: Caption\nColumn1: Value1, Column2: Value2...
 ```
 
-### Direct Table Extraction
+### API Usage
 
-```python
-from app.services import extract_tables_from_document
-
-# Extract tables directly from document
-document = parser.parse_pdf_to_document(pdf_content)
-tables = extract_tables_from_document(document)
-
-# Each table contains:
-for table in tables:
-    print(f"Caption: {table['caption']}")
-    print(f"Headers: {table['headers']}")
-    print(f"Rows: {table['num_rows']}")
-    print(f"Serialized:\n{table['serialized_text']}")
+```bash
+curl -X POST "http://localhost:8878/parse/file" \
+  -F "file=@your_pdf.pdf" \
+  -F "enable_chunking=true" \
+  -F "serialize_tables=true" \
+  -F "max_tokens_per_chunk=2048"
 ```
 
-### Debugging with Inspector
+### Direct Table Serialization
 
 ```python
-from app.services import inspect_document_structure, inspect_table_data
+from app.services import serialize_table_from_chunk
 
-# Inspect entire document
-inspect_document_structure(document)
-
-# Inspect specific table
-for item, level in document.body.iterate_items():
-    if item.label == 'table':
-        inspect_table_data(item)
+# For a specific chunk
+for chunk in chunker.chunk(document):
+    if chunk_is_table(chunk):
+        serialized = serialize_table_from_chunk(chunk)
+        if serialized:
+            print(serialized)
 ```
 
 ## API Reference
 
-### `extract_tables_from_document(document: DoclingDocument) -> List[Dict]`
+### `serialize_table_from_chunk(chunk: BaseChunk) -> Optional[str]`
 
-Extract all tables from DoclingDocument structure.
+Serialize table from a chunk's doc_items.
 
-**Returns:** List of dictionaries:
+**Args:** BaseChunk object from HybridChunker
+**Returns:** Serialized table text in key-value format, or None if no table found
+
+**Example:**
 ```python
-{
-    'caption': str,              # Table caption (if available)
-    'serialized_text': str,      # Key-value formatted text
-    'headers': List[str],        # Column headers
-    'num_rows': int,            # Number of data rows
-    'item': Any,                # Original table item
-    'level': int                # Nesting level in document
-}
+serialized = serialize_table_from_chunk(chunk)
+if serialized:
+    print("Table:", serialized[:100])
 ```
 
-### `serialize_table_item(item: Any) -> Optional[str]`
+### `extract_table_structure(table_data: Any) -> Optional[Dict]`
 
-Serialize a single table item from document.body.iterate_items().
+Extract structured data from Docling's TableData object.
 
-**Args:** Table item from DoclingDocument
-**Returns:** Serialized table text, or None if extraction fails
+**Returns:** Dictionary with headers, rows, and grid information
 
-### `format_table_as_keyvalue(headers: List[str], rows: List[List[str]], caption: Optional[str]) -> str`
+### `format_table_as_keyvalue(headers, rows, caption) -> str`
 
 Format table data as key-value pairs for embedding.
 
@@ -146,159 +129,50 @@ text = format_table_as_keyvalue(headers, rows, 'Sales Data')
 # Region: South, Q1: 120, Q2: 180
 ```
 
-### `inspect_document_structure(document: DoclingDocument) -> None`
+## How It Works Internally
 
-Print detailed information about document structure (for debugging).
-
-### `inspect_table_data(item: Any) -> None`
-
-Deep inspection of a single table item (for debugging).
-
-## How It Works
-
-### 1. Document-Level Extraction
+### 1. HybridChunker Processes Document
 
 ```python
-# In chunk_document() when serialize_tables=True:
-
-# Step 1: Extract tables from document BEFORE chunking
-extracted_tables = extract_tables_from_document(document)
-
-# Step 2: Build mapping from table text to serialized version
-table_texts = {}
-for table_info in extracted_tables:
-    orig_text = table_info['item'].text
-    table_texts[orig_text[:200]] = table_info['serialized_text']
-```
-
-### 2. Table Structure Access
-
-```python
-# Inside extract_tables_from_document():
-
-for item, level in document.body.iterate_items():
-    if item.label == 'table':
-        # Access structured data directly
-        table_data = item.data  # TableData object
-        grid = table_data.grid  # Grid structure
-        
-        # Try multiple extraction methods:
-        # 1. grid.export_to_dataframe()
-        # 2. grid.export_to_list()
-        # 3. grid.cells iteration
-        # 4. Markdown export (fallback)
-```
-
-### 3. Chunk Matching
-
-```python
-# Step 3: After chunking, match table chunks to serialized versions
-
+# HybridChunker extracts tables during chunking
+chunker = HybridChunker(tokenizer=tokenizer)
 for chunk in chunker.chunk(document):
-    if chunk is table:
-        # Match chunk text to pre-extracted table
-        for text_key, serialized in table_texts.items():
-            if matches(chunk.text, text_key):
-                chunk.text = serialized  # Replace with key-value format
+    # Chunk has tables in chunk.meta.doc_items
+    # Each table has label='table' and item.data (TableData)
 ```
 
-## Testing
-
-### Test with PDF
-
-```bash
-python test_document_tables.py your_file.pdf
-```
-
-This will:
-1. Parse PDF to DoclingDocument
-2. Inspect document structure
-3. Extract tables directly
-4. Show serialized output
-
-### Test with API
-
-```bash
-curl -X POST "http://localhost:8878/parse/chunk" \
-  -F "file=@your_pdf_with_tables.pdf" \
-  -F 'chunk_options={"serialize_tables": true}'
-```
-
-Check output for tables with `content_type: "table"`.
-
-## Benefits of New Architecture
-
-### vs Old Text Parsing Approach
-
-| Aspect | Old (v1.x) | New (v2.0) |
-|--------|-----------|-----------|
-| **Extraction** | Parse flattened text | Direct structure access |
-| **Reliability** | Regex patterns, fragile | Native Docling API |
-| **Code** | Complex parsers | Simple extraction |
-| **Quality** | Lossy, pattern-dependent | Full table structure |
-| **Maintenance** | Hard to update | Easy to maintain |
-
-### Comparison
-
-**Old approach (v1.x):**
-```python
-# Parse text like: "Activity, Column = Value. Activity, Column = Value."
-result = _parse_docling_text_table(chunk.text)  # Fragile!
-```
-
-**New approach (v2.0):**
-```python
-# Access structure directly
-for item in document.body.iterate_items():
-    if item.label == 'table':
-        grid = item.data.grid  # Clean!
-        headers, rows = extract_from_grid(grid)
-```
-
-## Troubleshooting
-
-### Enable Debug Logging
-
-```bash
-LOG_LEVEL=DEBUG
-```
-
-Look for:
-- `"Extracting tables from document structure..."`
-- `"Extracted N tables in X.XXs"`
-- `"Matched and serialized table chunk N"`
-
-### Common Issues
-
-**Issue: No tables extracted**
-- Check that `DOCLING_DO_TABLE_STRUCTURE=true` is set
-- Use `inspect_document_structure()` to see what's in the document
-- Verify PDF actually contains tables
-
-**Issue: Tables not serialized**
-- Check logs for "could not be matched to extracted tables"
-- The chunk text might not match the table item text
-- Try with `LOG_LEVEL=DEBUG` to see matching attempts
-
-**Issue: Empty table data**
-- Some tables might not have extractable grid structure
-- Check `inspect_table_data(item)` to see what's available
-- Fallback to markdown export if grid is empty
-
-### Inspect Your Document
+### 2. Detect Table Chunks
 
 ```python
-from app.services import inspect_document_structure
-
-document = parser.parse_pdf_to_document(pdf_content)
-inspect_document_structure(document)
+# Check if chunk contains a table
+if chunk.meta.doc_items:
+    for item in chunk.meta.doc_items:
+        if item.label == 'table':
+            # Found a table!
 ```
 
-This shows:
-- What attributes are available
-- How many tables exist
-- What data each table has
-- Available extraction methods
+### 3. Extract Table Structure
+
+```python
+# Access table data from item
+table_data = item.data  # TableData object
+grid = table_data.grid  # Grid structure
+
+# Try multiple extraction methods:
+# 1. grid.export_to_dataframe()
+# 2. grid.export_to_list()
+# 3. grid.cells iteration
+# 4. Markdown export (fallback)
+```
+
+### 4. Serialize to Key-Value Format
+
+```python
+# Format as key-value pairs
+for row in rows:
+    pairs = [f"{header}: {value}" for header, value in zip(headers, row)]
+    formatted_row = ', '.join(pairs)
+```
 
 ## Configuration
 
@@ -323,47 +197,96 @@ chunks = chunk_document(
 )
 ```
 
+## Example Output
+
+### Before Serialization
+
+```
+"Apple M3 Max, Thread budget. = 4. Apple M3 Max, native backend.TTS = 177 s 167 s..."
+```
+
+### After Serialization
+
+```
+Table: Runtime characteristics
+CPU: Apple M3 Max, Thread budget: 4, native backend TTS: 177 s, Pages/s: 1.27
+CPU: Intel Xeon E5-2690, Thread budget: 16, native backend TTS: 375 s, Pages/s: 0.60
+```
+
+Much cleaner for embeddings!
+
+## Troubleshooting
+
+### Enable Debug Logging
+
+```bash
+LOG_LEVEL=DEBUG
+```
+
+Look for:
+- `"Serialized table chunk N"` - Success
+- `"Table chunk N could not be serialized"` - Failure
+- `"Table serialization: X tables successfully serialized"` - Summary
+
+### Common Issues
+
+**Issue: No tables serialized**
+- Check that `DOCLING_DO_TABLE_STRUCTURE=true` is set
+- Verify `serialize_tables=True` is passed to chunk_document()
+- Enable debug logging to see what's happening
+
+**Issue: Tables not in key-value format**
+- Check logs for serialization attempts
+- Verify table has extractable structure (headers and rows)
+- Some tables might not have grid data
+
+**Issue: Extraction fails**
+- Table might not have accessible grid structure
+- Check if table.data exists
+- Fallback to markdown export might be needed
+
+### Debug Example
+
+```python
+# Check if chunk has table
+if chunk.meta.doc_items:
+    for item in chunk.meta.doc_items:
+        if item.label == 'table':
+            print(f"Found table!")
+            print(f"Has data: {hasattr(item, 'data')}")
+            if item.data:
+                print(f"Has grid: {hasattr(item.data, 'grid')}")
+```
+
+## Benefits
+
+| Benefit | Description |
+|---------|-------------|
+| **Correct API** | Uses actual Docling API (chunk.meta.doc_items) |
+| **No Pre-processing** | Tables extracted during normal chunking |
+| **Reliable** | Access structured data from chunks |
+| **Simple** | Just enable serialize_tables=True |
+| **Better Embeddings** | Key-value format more semantic than raw text |
+
 ## Version History
 
-- **v2.0** (2025-10-21): Document-level extraction architecture
-  - Complete refactor to extract from DoclingDocument
-  - Added `extract_tables_from_document()`
-  - Added `document_inspector` module for debugging
-  - Removed text parsing approach
-  - Direct access to TableData.grid
-  - More reliable and maintainable
+- **v2.1** (2025-10-21): Correct chunk-level extraction
+  - Fixed to use `chunk.meta.doc_items` (correct Docling API)
+  - Removed incorrect `document.body.iterate_items()` approach
+  - Simplified architecture - work with chunks directly
+  - More reliable and aligned with Docling docs
 
-- **v1.1** (2025-10-21): Text-based parser (deprecated)
-  - Added text parsing for prose-style tables
-  - Complex regex patterns
+- **v2.0** (2025-10-21): Document-level extraction (incorrect)
+  - Attempted to use non-existent document.body.iterate_items()
+  - Over-complicated with pre-extraction
 
-- **v1.0** (2025-10-21): Initial implementation (deprecated)
-  - Chunk-level text parsing
-  - Markdown table parser
-
-## Migration from v1.x
-
-If you were using v1.x:
-
-**Old code:**
-```python
-from app.services import serialize_table_chunk
-
-serialized = serialize_table_chunk(chunk)
-```
-
-**New code:**
-```python
-# Now done automatically when serialize_tables=True
-chunks = chunk_document(document, serialize_tables=True)
-```
-
-The new approach is automatic - just enable `serialize_tables=True` in `chunk_document()`.
+- **v1.x** (2025-10-21): Text parsing approach (deprecated)
+  - Tried to parse flattened text back into structure
 
 ## Support
 
 For questions or issues:
-- Enable DEBUG logging
-- Use `inspect_document_structure()` to see document contents
-- Check that Docling table extraction is enabled
+- Enable DEBUG logging to see extraction details
+- Check that `DOCLING_DO_TABLE_STRUCTURE=true` is set
+- Verify tables appear in chunk.meta.doc_items
 - Share debug logs for troubleshooting
