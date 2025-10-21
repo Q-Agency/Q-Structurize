@@ -1,6 +1,6 @@
 # GPU-enabled Dockerfile for Q-Structurize with StandardPdfPipeline
-# Optimized for 2x NVIDIA H200 GPUs with CUDA 12.1
-FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+# Optimized for 2x NVIDIA H200 GPUs with CUDA 12.6
+FROM nvidia/cuda:12.6.2-runtime-ubuntu22.04
 
 WORKDIR /app
 
@@ -32,8 +32,8 @@ RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
 # Install Python deps first (cacheable)
 COPY requirements.txt .
 
-# Install PyTorch with CUDA 12.1 support, then other requirements
-RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu121 && \
+# Install PyTorch with CUDA 12.6 support, then other requirements
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu124 && \
     pip install --no-cache-dir -r requirements.txt
 
 # Prepare cache directories (these will be volumes at runtime)
