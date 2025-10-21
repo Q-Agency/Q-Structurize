@@ -331,13 +331,55 @@ def serialize_table_from_chunk(chunk: BaseChunk, document: Any = None) -> Option
             except Exception as e:
                 logger.warning(f"model_dump() failed: {e}")
         
-        # Try get_ref() to get reference
+        # Try get_ref() to get reference and resolve it from document
         if hasattr(table_item, 'get_ref'):
             try:
                 ref = table_item.get_ref()
                 logger.info(f"get_ref() returned: {ref}")
+                
+                # Parse the reference (e.g., '#/tables/0')
+                if document and hasattr(ref, 'cref'):
+                    ref_str = ref.cref
+                    logger.info(f"Reference string: {ref_str}")
+                    
+                    # Parse reference like '#/tables/0'
+                    if ref_str.startswith('#/tables/'):
+                        table_index = int(ref_str.split('/')[-1])
+                        logger.info(f"Trying to access document.tables[{table_index}]")
+                        
+                        # Access the actual table from document
+                        if hasattr(document, 'tables') and document.tables:
+                            if table_index < len(document.tables):
+                                actual_table = document.tables[table_index]
+                                logger.info(f"✅ Found actual table in document.tables[{table_index}]!")
+                                logger.info(f"Table type: {type(actual_table)}")
+                                
+                                # Now extract from the actual table
+                                if hasattr(actual_table, 'data'):
+                                    logger.info("Actual table has 'data' attribute!")
+                                    table_struct = extract_table_structure(actual_table.data)
+                                    
+                                    if table_struct and table_struct.get('headers'):
+                                        logger.info(f"Successfully extracted from resolved table: {len(table_struct.get('headers', []))} headers, {len(table_struct.get('rows', []))} rows")
+                                        
+                                        # Format and return
+                                        serialized = format_table_as_keyvalue(
+                                            headers=table_struct['headers'],
+                                            rows=table_struct['rows'],
+                                            caption=caption
+                                        )
+                                        return serialized
+                                else:
+                                    logger.warning("Actual table has no 'data' attribute")
+                            else:
+                                logger.warning(f"Table index {table_index} out of range (document has {len(document.tables)} tables)")
+                        else:
+                            logger.warning("Document has no 'tables' attribute or it's empty")
+                else:
+                    logger.warning("No document provided or ref has no 'cref' attribute")
+                    
             except Exception as e:
-                logger.warning(f"get_ref() failed: {e}")
+                logger.warning(f"Reference resolution failed: {e}", exc_info=True)
         
         return None
     
