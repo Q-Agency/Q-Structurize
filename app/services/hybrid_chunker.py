@@ -138,6 +138,7 @@ def extract_chunk_metadata(chunk: BaseChunk) -> Dict[str, Any]:
         
         if "table" in types:
             content_type = "table"
+            logger.debug(f"Chunk metadata: Detected table (doc_items types: {types})")
         elif "list_item" in types:
             content_type = "list"
         elif "section_header" in types:
@@ -265,16 +266,19 @@ def chunk_document(
         
         # Handle table serialization if enabled
         final_text = prefixed_text
-        if serialize_tables and metadata.get("content_type") == "table":
-            # Serialize table from chunk's doc_items
-            serialized = serialize_table_from_chunk(chunk)
-            if serialized:
-                # Use serialized table text instead of default text
-                final_text = f"search_document: {serialized}"
-                tables_serialized += 1
-                logger.debug(f"Serialized table chunk {chunk_idx}")
-            else:
-                logger.debug(f"Table chunk {chunk_idx} could not be serialized, using default text")
+        if serialize_tables:
+            # Log if this is a table chunk
+            if metadata.get("content_type") == "table":
+                logger.info(f"Chunk {chunk_idx}: Detected as table, attempting serialization")
+                # Serialize table from chunk's doc_items
+                serialized = serialize_table_from_chunk(chunk)
+                if serialized:
+                    # Use serialized table text instead of default text
+                    final_text = f"search_document: {serialized}"
+                    tables_serialized += 1
+                    logger.info(f"Chunk {chunk_idx}: Successfully serialized table")
+                else:
+                    logger.warning(f"Chunk {chunk_idx}: Table detected but serialization failed, using default text")
         
         # Create chunk data dictionary
         chunk_data = {

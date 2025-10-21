@@ -234,22 +234,34 @@ def serialize_table_from_chunk(chunk: BaseChunk) -> Optional[str]:
         ...         if serialized:
         ...             print(serialized)
     """
-    if not hasattr(chunk, 'meta') or not hasattr(chunk.meta, 'doc_items'):
-        logger.debug("Chunk has no doc_items")
+    if not hasattr(chunk, 'meta'):
+        logger.warning("Chunk has no meta attribute")
         return None
+        
+    if not hasattr(chunk.meta, 'doc_items'):
+        logger.warning("Chunk.meta has no doc_items attribute")
+        return None
+    
+    if not chunk.meta.doc_items:
+        logger.info("Chunk.meta.doc_items is empty")
+        return None
+    
+    logger.info(f"Chunk has {len(chunk.meta.doc_items)} doc_items, checking for tables...")
     
     # Find table items in doc_items
     table_item = None
-    for item in chunk.meta.doc_items:
+    for i, item in enumerate(chunk.meta.doc_items):
+        logger.debug(f"  Item {i}: label={getattr(item, 'label', 'NO_LABEL')}")
         if hasattr(item, 'label') and item.label == 'table':
             table_item = item
+            logger.info(f"  Found table at item {i}!")
             break
     
     if not table_item:
-        logger.debug("No table found in chunk doc_items")
+        logger.info("No table item found in doc_items (checked all items)")
         return None
     
-    logger.debug(f"Found table item in chunk")
+    logger.info(f"Processing table item...")
     
     # Extract caption
     caption = None
