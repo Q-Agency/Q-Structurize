@@ -25,6 +25,7 @@ from typing import List, Dict, Any, Optional, Set
 from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling_core.transforms.chunker import BaseChunk
 from docling_core.types.doc.document import DoclingDocument
+from app.services.table_serializer import serialize_table_chunk
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +189,8 @@ def chunk_document(
     max_tokens: int = 512,
     merge_peers: bool = True,
     tokenizer: Optional[Any] = None,
-    include_full_metadata: bool = False
+    include_full_metadata: bool = False,
+    serialize_tables: bool = False
 ) -> List[Dict[str, Any]]:
     """
     Chunk a DoclingDocument with flexible metadata options.
@@ -196,6 +198,7 @@ def chunk_document(
     APPROACH:
     - Always includes curated metadata via extract_chunk_metadata()
     - Optionally includes complete Docling metadata via chunk.model_dump()
+    - Optionally serializes table chunks into embedding-optimized format
     
     METADATA OPTIONS:
     - Default (include_full_metadata=False):
@@ -208,12 +211,19 @@ def chunk_document(
       - Includes all curated metadata PLUS complete Docling metadata
       - Maximum information preservation
     
+    TABLE SERIALIZATION:
+    - When serialize_tables=True, table chunks are reformatted as key-value pairs
+    - Format: "Column1: Value1, Column2: Value2, ..."
+    - Includes table caption as prefix (if available)
+    - Optimized for embedding models and semantic search
+    
     Args:
         document: DoclingDocument to chunk
         max_tokens: Maximum tokens per chunk (default: 512)
         merge_peers: Whether to merge undersized successive chunks with same headings (default: True)
         tokenizer: Optional tokenizer (uses HybridChunker's built-in if None)
         include_full_metadata: Include complete Docling metadata via model_dump() (default: False)
+        serialize_tables: Serialize table chunks as key-value pairs for embeddings (default: False)
         
     Returns:
         List of chunk dictionaries with text, metadata, and optional full metadata
@@ -226,6 +236,10 @@ def chunk_document(
         >>> # With complete Docling metadata
         >>> chunks = chunk_document(document, max_tokens=1024, include_full_metadata=True)
         >>> print(chunks[0].keys())  # Includes 'full_metadata' with all Docling fields
+        
+        >>> # With table serialization for embeddings
+        >>> chunks = chunk_document(document, max_tokens=1024, serialize_tables=True)
+        >>> # Table chunks will have key-value format text
     """
     logger.info(f"Starting document chunking: max_tokens={max_tokens}, merge_peers={merge_peers}")
     start_time = time.time()
@@ -248,9 +262,18 @@ def chunk_document(
         # Extract curated metadata
         metadata = extract_chunk_metadata(chunk)
         
+        # Handle table serialization if enabled
+        final_text = prefixed_text
+        if serialize_tables and metadata.get("content_type") == "table":
+            serialized = serialize_table_chunk(chunk)
+            if serialized:
+                # Use serialized table text instead of default text
+                final_text = f"search_document: {serialized}"
+                logger.debug(f"Serialized table chunk {chunk_idx} for embedding")
+        
         # Create chunk data dictionary
         chunk_data = {
-            "text": prefixed_text,
+            "text": final_text,
             "section_title": section_title,
             "chunk_index": chunk_idx,
             "metadata": metadata
