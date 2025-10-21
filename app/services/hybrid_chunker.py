@@ -234,6 +234,7 @@ def chunk_document(
     
     chunks = []
     tables_serialized = 0
+    tables_failed = 0
     
     # Process document with HybridChunker
     for chunk_idx, chunk in enumerate(chunker.chunk(document)):
@@ -261,9 +262,8 @@ def chunk_document(
                     else:
                         final_text = f"search_document: {serialized}"
                     tables_serialized += 1
-                    logger.debug(f"Chunk {chunk_idx}: Successfully serialized table")
                 else:
-                    logger.warning(f"Chunk {chunk_idx}: Table detected but serialization failed, using default text")
+                    tables_failed += 1
         
         # Create chunk data dictionary
         chunk_data = {
@@ -285,9 +285,12 @@ def chunk_document(
     # Log statistics (shared logic)
     _log_chunk_statistics(chunks, start_time, text_field="text", is_native=False)
     
-    # Log table serialization results
-    if serialize_tables:
-        logger.info(f"Table serialization: {tables_serialized} tables successfully serialized")
+    # Log table serialization results (one line summary)
+    if serialize_tables and (tables_serialized > 0 or tables_failed > 0):
+        if tables_failed > 0:
+            logger.info(f"📊 Tables: {tables_serialized} serialized, {tables_failed} failed")
+        else:
+            logger.info(f"📊 Tables: {tables_serialized} serialized")
     
     return chunks
 

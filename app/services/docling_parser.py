@@ -307,15 +307,18 @@ class DoclingParser:
         
         try:
             # Create temporary file for PDF content
+            parse_start = time.time()
             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
                 tmp_file.write(pdf_content)
                 tmp_file.flush()
                 tmp_path = tmp_file.name
                 
-                logger.debug(f"Parsing PDF to document object (size: {len(pdf_content):,} bytes)")
+                logger.info(f"📄 Parsing PDF to document ({len(pdf_content):,} bytes)")
                 
                 # Convert using pre-initialized converter
+                conversion_start = time.time()
                 result = self.converter.convert(source=tmp_path)
+                conversion_time = time.time() - conversion_start
                 
                 # Clean up temporary file
                 try:
@@ -323,11 +326,14 @@ class DoclingParser:
                 except Exception:
                     pass
                 
+                total_time = time.time() - parse_start
+                logger.info(f"✅ Document parsed in {total_time:.2f}s (conversion: {conversion_time:.2f}s)")
+                
                 # Return the document object
                 return result.document
                 
         except Exception as e:
-            logger.error(f"Error parsing PDF to document: {str(e)}", exc_info=True)
+            logger.error(f"❌ Error parsing PDF to document: {str(e)}", exc_info=True)
             raise RuntimeError(f"Failed to parse PDF: {str(e)}") from e
     
     def is_available(self) -> bool:

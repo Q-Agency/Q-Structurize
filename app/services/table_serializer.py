@@ -95,7 +95,6 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
                         
                         result['headers'] = extracted_rows[0] if extracted_rows else None
                         result['rows'] = extracted_rows[1:] if len(extracted_rows) > 1 else []
-                        logger.info(f"✅ Extracted from grid list: {len(result['rows'])} rows")
                         return result
                     else:
                         logger.debug(f"Grid first item type: {type(grid[0])}")
@@ -112,7 +111,6 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
                         if rows_from_objects:
                             result['headers'] = rows_from_objects[0] if rows_from_objects else None
                             result['rows'] = rows_from_objects[1:] if len(rows_from_objects) > 1 else []
-                            logger.info(f"✅ Extracted from grid objects: {len(result['rows'])} rows")
                             return result
                 
                 # If we get here, grid format wasn't recognized
@@ -127,7 +125,6 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
                     if df is not None and not df.empty:
                         result['headers'] = df.columns.tolist()
                         result['rows'] = df.values.tolist()
-                        logger.info(f"✅ Extracted via dataframe: {len(result['rows'])} rows")
                         return result
                     else:
                         logger.debug("export_to_dataframe returned empty/None")
@@ -144,7 +141,6 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
                     if rows and len(rows) > 0:
                         result['headers'] = rows[0] if rows else None
                         result['rows'] = rows[1:] if len(rows) > 1 else []
-                        logger.info(f"✅ Extracted via list: {len(result['rows'])} rows")
                         return result
                     else:
                         logger.debug("export_to_list returned empty")
@@ -182,7 +178,6 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
                         if all_rows:
                             result['headers'] = all_rows[0]
                             result['rows'] = all_rows[1:] if len(all_rows) > 1 else []
-                            logger.info(f"✅ Extracted via cells: {len(result['rows'])} rows")
                             return result
                     else:
                         logger.debug("Cell iteration produced no rows")
@@ -211,7 +206,6 @@ def extract_table_structure(table_data: Any) -> Optional[Dict[str, Any]]:
                         if rows:
                             result['headers'] = rows[0]
                             result['rows'] = rows[1:] if len(rows) > 1 else []
-                            logger.info(f"✅ Extracted via markdown: {len(result['rows'])} rows")
                             return result
                         else:
                             logger.debug("Markdown parsing produced no rows")
@@ -304,117 +298,70 @@ def serialize_table_from_chunk(chunk: BaseChunk, document: Any = None) -> Option
         ...         if serialized:
         ...             print(serialized)
     """
-    if not hasattr(chunk, 'meta'):
-        logger.warning("Chunk has no meta attribute")
+    if not hasattr(chunk, 'meta') or not hasattr(chunk.meta, 'doc_items') or not chunk.meta.doc_items:
         return None
-        
-    if not hasattr(chunk.meta, 'doc_items'):
-        logger.warning("Chunk.meta has no doc_items attribute")
-        return None
-    
-    if not chunk.meta.doc_items:
-        logger.info("Chunk.meta.doc_items is empty")
-        return None
-    
-    logger.info(f"Chunk has {len(chunk.meta.doc_items)} doc_items, checking for tables...")
     
     # Find table items in doc_items
     table_item = None
-    for i, item in enumerate(chunk.meta.doc_items):
-        logger.debug(f"  Item {i}: label={getattr(item, 'label', 'NO_LABEL')}")
+    for item in chunk.meta.doc_items:
         if hasattr(item, 'label') and item.label == 'table':
             table_item = item
-            logger.info(f"  Found table at item {i}!")
             break
     
     if not table_item:
-        logger.info("No table item found in doc_items (checked all items)")
         return None
-    
-    logger.info(f"Processing table item...")
     
     # Extract caption
     caption = None
     if hasattr(table_item, 'captions') and table_item.captions:
         caption = ' '.join(str(cap) for cap in table_item.captions)
-        logger.info(f"Table caption: {caption}")
-    else:
-        logger.info("No caption found")
     
     # Check if table item has data
     if not hasattr(table_item, 'data'):
-        logger.warning("Table item has no 'data' attribute, trying reference resolution...")
-        
         # Try get_ref() to get reference and resolve it from document
         if hasattr(table_item, 'get_ref'):
             try:
                 ref = table_item.get_ref()
-                logger.info(f"get_ref() returned: {ref}")
                 
                 # Parse the reference (e.g., '#/tables/0')
                 if document and hasattr(ref, 'cref'):
                     ref_str = ref.cref
-                    logger.info(f"Reference string: {ref_str}")
                     
                     # Parse reference like '#/tables/0'
                     if ref_str.startswith('#/tables/'):
                         table_index = int(ref_str.split('/')[-1])
-                        logger.info(f"Trying to access document.tables[{table_index}]")
                         
                         # Access the actual table from document
                         if hasattr(document, 'tables') and document.tables:
                             if table_index < len(document.tables):
                                 actual_table = document.tables[table_index]
-                                logger.info(f"✅ Found actual table in document.tables[{table_index}]!")
-                                logger.info(f"Table type: {type(actual_table)}")
                                 
                                 # Now extract from the actual table
                                 if hasattr(actual_table, 'data'):
-                                    logger.info("Actual table has 'data' attribute!")
                                     table_struct = extract_table_structure(actual_table.data)
                                     
                                     if table_struct and table_struct.get('headers'):
-                                        logger.info(f"Successfully extracted from resolved table: {len(table_struct.get('headers', []))} headers, {len(table_struct.get('rows', []))} rows")
-                                        
                                         # Format and return
                                         serialized = format_table_as_keyvalue(
                                             headers=table_struct['headers'],
                                             rows=table_struct['rows'],
                                             caption=caption
                                         )
-                                        logger.info(f"📝 Serialized table preview: {serialized[:200]}...")
                                         return serialized
-                                else:
-                                    logger.warning("Actual table has no 'data' attribute")
-                            else:
-                                logger.warning(f"Table index {table_index} out of range (document has {len(document.tables)} tables)")
-                        else:
-                            logger.warning("Document has no 'tables' attribute or it's empty")
-                else:
-                    logger.warning("No document provided or ref has no 'cref' attribute")
                     
             except Exception as e:
-                logger.warning(f"Reference resolution failed: {e}", exc_info=True)
+                logger.warning(f"⚠️  Table serialization failed: {e}")
         
         return None
     
     if not table_item.data:
-        logger.warning("Table item.data is None!")
         return None
     
     # Extract table structure from item.data
-    logger.info(f"Extracting table structure from item.data (type: {type(table_item.data)})")
     table_struct = extract_table_structure(table_item.data)
     
-    if not table_struct:
-        logger.warning("extract_table_structure returned None")
+    if not table_struct or not table_struct.get('headers'):
         return None
-    
-    if not table_struct.get('headers'):
-        logger.warning(f"Table structure has no headers. Structure: {table_struct}")
-        return None
-    
-    logger.info(f"Successfully extracted table structure: {len(table_struct.get('headers', []))} headers, {len(table_struct.get('rows', []))} rows")
     
     # Format as key-value pairs
     serialized = format_table_as_keyvalue(
@@ -422,8 +369,5 @@ def serialize_table_from_chunk(chunk: BaseChunk, document: Any = None) -> Option
         rows=table_struct['rows'],
         caption=caption
     )
-    
-    logger.info(f"Serialized table: {len(table_struct['rows'])} rows, {len(table_struct['headers'])} columns")
-    logger.info(f"📝 Serialized table preview: {serialized[:200]}...")
     
     return serialized
