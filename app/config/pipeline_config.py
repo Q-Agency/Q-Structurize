@@ -146,20 +146,6 @@ PIPELINE_OPTIONS_CONFIG = {
                 "large_documents": "300-500",
                 "very_large": "500-1000"
             }
-        },
-        "batch_timeout_seconds": {
-            "type": "float",
-            "default": 2.0,
-            "min": 0.1,
-            "max": 30.0,
-            "description": "Timeout for batch processing in seconds",
-            "notes": "Time to wait for a batch to fill before processing. Lower = more responsive, higher = better batching efficiency.",
-            "recommendations": {
-                "low_latency": "0.1-1.0",
-                "balanced": "1.0-3.0",
-                "high_throughput": "3.0-10.0",
-                "maximum_batching": "10.0-30.0"
-            }
         }
     },
     "example_configurations": {
@@ -243,8 +229,7 @@ PIPELINE_OPTIONS_CONFIG = {
                 "layout_batch_size": 16,
                 "table_batch_size": 16,
                 "ocr_batch_size": 16,
-                "queue_max_size": 500,
-                "batch_timeout_seconds": 5.0
+                "queue_max_size": 500
             }
         },
         "low_latency": {
@@ -254,8 +239,7 @@ PIPELINE_OPTIONS_CONFIG = {
                 "layout_batch_size": 1,
                 "table_batch_size": 1,
                 "ocr_batch_size": 1,
-                "queue_max_size": 50,
-                "batch_timeout_seconds": 0.5
+                "queue_max_size": 50
             }
         },
         "balanced_batching": {
@@ -265,8 +249,7 @@ PIPELINE_OPTIONS_CONFIG = {
                 "layout_batch_size": 8,
                 "table_batch_size": 8,
                 "ocr_batch_size": 8,
-                "queue_max_size": 200,
-                "batch_timeout_seconds": 2.0
+                "queue_max_size": 200
             }
         },
         "large_document_processing": {
@@ -277,7 +260,6 @@ PIPELINE_OPTIONS_CONFIG = {
                 "table_batch_size": 12,
                 "ocr_batch_size": 12,
                 "queue_max_size": 1000,
-                "batch_timeout_seconds": 3.0,
                 "table_mode": "fast"
             }
         }
@@ -353,8 +335,7 @@ PIPELINE_OPTIONS_CONFIG = {
   -F "num_threads=64" \\
   -F "layout_batch_size=16" \\
   -F "table_batch_size=16" \\
-  -F "queue_max_size=500" \\
-  -F "batch_timeout_seconds=3.0"
+  -F "queue_max_size=500"
 ''',
         "example_curl_chunking": '''curl -X POST "http://localhost:8000/parse/file" \\
   -F "file=@document.pdf" \\

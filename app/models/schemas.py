@@ -95,12 +95,6 @@ class PipelineOptions(BaseModel):
         le=1000,
         description="Maximum queue size for backpressure control (10-1000)"
     )
-    batch_timeout_seconds: float = Field(
-        default=2.0,
-        ge=0.1,
-        le=30.0,
-        description="Timeout for batch processing in seconds (0.1-30.0)"
-    )
     
     class Config:
         json_schema_extra = {
@@ -119,8 +113,7 @@ class PipelineOptions(BaseModel):
                 "layout_batch_size": 4,
                 "ocr_batch_size": 4,
                 "table_batch_size": 4,
-                "queue_max_size": 100,
-                "batch_timeout_seconds": 2.0
+                "queue_max_size": 100
             }
         }
 

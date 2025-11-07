@@ -125,8 +125,7 @@ class DoclingParser:
             "layout_batch_size": int(os.environ.get('DOCLING_LAYOUT_BATCH_SIZE', '32')),
             "ocr_batch_size": int(os.environ.get('DOCLING_OCR_BATCH_SIZE', '32')),
             "table_batch_size": int(os.environ.get('DOCLING_TABLE_BATCH_SIZE', '32')),
-            "queue_max_size": int(os.environ.get('DOCLING_QUEUE_MAX_SIZE', '1000')),
-            "batch_timeout_seconds": float(os.environ.get('DOCLING_BATCH_TIMEOUT', '0.5'))
+            "queue_max_size": int(os.environ.get('DOCLING_QUEUE_MAX_SIZE', '1000'))
         }
         
         # Enable Docling's built-in pipeline profiling for detailed timing
@@ -213,7 +212,6 @@ class DoclingParser:
         pipeline_options.ocr_batch_size = user_options.get("ocr_batch_size", 32)
         pipeline_options.table_batch_size = user_options.get("table_batch_size", 32)
         pipeline_options.queue_max_size = user_options.get("queue_max_size", 1000)
-        pipeline_options.batch_timeout_seconds = user_options.get("batch_timeout_seconds", 0.5)
         
         return pipeline_options
     
