@@ -7,3 +7,5 @@ transformers>=4.30.0
 # LlamaIndex for semantic chunking refinement
 llama-index-core>=0.10.0
 llama-index-embeddings-huggingface>=0.1.0
+# Required for some embedding models like nomic-embed-text-v1.5
+einops>=0.7.0

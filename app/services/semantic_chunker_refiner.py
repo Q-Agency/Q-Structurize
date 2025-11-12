@@ -48,7 +48,7 @@ class SemanticChunkerRefiner:
     def __init__(
         self,
         max_tokens: int = 768,
-        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+        embedding_model: Optional[str] = None,
         breakpoint_percentile_threshold: float = 95,
         similarity_threshold: Optional[float] = None,
         tokenizer: Optional[Any] = None
@@ -58,7 +58,10 @@ class SemanticChunkerRefiner:
         
         Args:
             max_tokens: Maximum tokens per refined chunk
-            embedding_model: HuggingFace embedding model for semantic similarity
+            embedding_model: Optional HuggingFace embedding model for semantic similarity.
+                           If None, uses lightweight default 'sentence-transformers/all-MiniLM-L6-v2'.
+                           Note: This is separate from the tokenizer model - semantic chunking only
+                           needs to identify similarity breakpoints, not match your exact embedding model.
             breakpoint_percentile_threshold: Percentile threshold for breakpoint detection (default: 95)
             similarity_threshold: Optional fixed similarity threshold (overrides percentile)
             tokenizer: Optional tokenizer for counting tokens (uses embedding model's tokenizer if None)
@@ -66,21 +69,41 @@ class SemanticChunkerRefiner:
         self.max_tokens = max_tokens
         self.tokenizer = tokenizer
         
+        # Use lightweight default model if not specified (avoids loading heavy models twice)
+        if embedding_model is None:
+            embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
+            logger.info(f"Using lightweight default embedding model for semantic chunking: {embedding_model}")
+        
         logger.info(f"Initializing SemanticChunkerRefiner: max_tokens={max_tokens}, embedding_model={embedding_model}")
         
         # Initialize embedding model
         try:
             import os
             cache_dir = os.environ.get('HF_CACHE_DIR', './cache/huggingface')
+            # Only use trust_remote_code for models that need it (like nomic)
+            use_trust_remote_code = "nomic" in embedding_model.lower() or "bert-2048" in embedding_model.lower()
             self.embedding_model = HuggingFaceEmbedding(
                 model_name=embedding_model,
                 cache_folder=cache_dir,
-                trust_remote_code=True  # Required for models with custom code like nomic-embed-text-v1.5
+                trust_remote_code=use_trust_remote_code
             )
             logger.info(f"✅ Embedding model loaded: {embedding_model}")
         except Exception as e:
             logger.error(f"❌ Failed to load embedding model '{embedding_model}': {str(e)}")
-            raise RuntimeError(f"Failed to initialize embedding model: {str(e)}") from e
+            # If the specified model fails, try falling back to lightweight default
+            if embedding_model != "sentence-transformers/all-MiniLM-L6-v2":
+                logger.warning(f"⚠️  Falling back to lightweight default model")
+                try:
+                    self.embedding_model = HuggingFaceEmbedding(
+                        model_name="sentence-transformers/all-MiniLM-L6-v2",
+                        cache_folder=cache_dir
+                    )
+                    logger.info(f"✅ Fallback embedding model loaded: sentence-transformers/all-MiniLM-L6-v2")
+                except Exception as fallback_error:
+                    logger.error(f"❌ Fallback model also failed: {str(fallback_error)}")
+                    raise RuntimeError(f"Failed to initialize embedding model: {str(e)}") from e
+            else:
+                raise RuntimeError(f"Failed to initialize embedding model: {str(e)}") from e
         
         # Initialize semantic splitter
         try:
@@ -227,7 +250,7 @@ class SemanticChunkerRefiner:
 def refine_chunks(
     chunks: List[Dict[str, Any]],
     max_tokens: int = 768,
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+    embedding_model: Optional[str] = None,
     tokenizer: Optional[Any] = None,
     **kwargs
 ) -> List[Dict[str, Any]]:
@@ -237,7 +260,9 @@ def refine_chunks(
     Args:
         chunks: List of chunk dictionaries from Docling
         max_tokens: Maximum tokens per refined chunk
-        embedding_model: HuggingFace embedding model for semantic similarity
+        embedding_model: Optional HuggingFace embedding model for semantic similarity.
+                        If None, uses lightweight default. Note: This is separate from
+                        the tokenizer model - semantic chunking only needs similarity detection.
         tokenizer: Optional tokenizer for token counting
         **kwargs: Additional arguments passed to SemanticChunkerRefiner
         

@@ -310,24 +310,16 @@ def chunk_document(
     
     # Apply semantic refinement if requested
     if semantic_refinement:
-        if tokenizer is None:
-            logger.warning("⚠️  semantic_refinement=True but no tokenizer provided (embedding_model not specified), skipping refinement")
-        else:
-            # Extract embedding model name from tokenizer
-            embedding_model = None
-            if hasattr(tokenizer, 'name_or_path'):
-                embedding_model = tokenizer.name_or_path
-            else:
-                logger.warning("⚠️  Cannot extract embedding model name from tokenizer, skipping semantic refinement")
-            
-            if embedding_model:
-                logger.info(f"Applying semantic refinement with model: {embedding_model}")
-                chunks = semantic_refine_chunks(
-                    chunks=chunks,
-                    max_tokens=max_tokens,
-                    embedding_model=embedding_model,
-                    tokenizer=tokenizer
-                )
+        # Use lightweight default embedding model for semantic chunking
+        # (semantic chunking only needs similarity detection, not exact model matching)
+        # This avoids loading heavy models twice (once for tokenization, once for embeddings)
+        logger.info("Applying semantic refinement with lightweight default embedding model")
+        chunks = semantic_refine_chunks(
+            chunks=chunks,
+            max_tokens=max_tokens,
+            embedding_model=None,  # None = use lightweight default (all-MiniLM-L6-v2)
+            tokenizer=tokenizer
+        )
     
     return chunks
 
