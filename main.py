@@ -64,7 +64,8 @@ async def parse_pdf_file(
     embedding_model: Optional[str] = Form(None, description="HuggingFace embedding model name for tokenization (e.g., 'sentence-transformers/all-MiniLM-L6-v2'). If not specified, uses HybridChunker's built-in tokenizer"),
     include_markdown: bool = Form(False, description="Include full markdown content when chunking is enabled"),
     include_full_metadata: bool = Form(False, description="Include complete Docling metadata (model_dump) in addition to curated metadata"),
-    serialize_tables: bool = Form(False, description="Serialize table chunks as key-value pairs optimized for embeddings (extracts tables from document structure)")
+    serialize_tables: bool = Form(False, description="Serialize table chunks as key-value pairs optimized for embeddings (extracts tables from document structure)"),
+    semantic_refinement: bool = Form(False, description="Apply LlamaIndex semantic chunking refinement to improve chunk boundaries. Requires embedding_model to be specified.")
 ):
     # Validate file type
     if not file.content_type or not file.content_type.startswith('application/pdf'):
@@ -105,14 +106,15 @@ async def parse_pdf_file(
                         detail=f"Invalid embedding model: {str(e)}"
                     )
             
-            # Chunk document with optional full metadata and table serialization
+            # Chunk document with optional full metadata, table serialization, and semantic refinement
             chunks = hybrid_chunker.chunk_document(
                 document=document,
                 max_tokens=max_tokens_per_chunk,
                 merge_peers=merge_peers,
                 tokenizer=tokenizer,
                 include_full_metadata=include_full_metadata,
-                serialize_tables=serialize_tables
+                serialize_tables=serialize_tables,
+                semantic_refinement=semantic_refinement
             )
             
             # Convert chunk dicts to ChunkData models

@@ -26,6 +26,7 @@ from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling_core.transforms.chunker import BaseChunk
 from docling_core.types.doc.document import DoclingDocument
 from app.services.table_serializer import serialize_table_from_chunk
+from app.services.semantic_chunker_refiner import refine_chunks as semantic_refine_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +176,8 @@ def chunk_document(
     merge_peers: bool = True,
     tokenizer: Optional[Any] = None,
     include_full_metadata: bool = False,
-    serialize_tables: bool = False
+    serialize_tables: bool = False,
+    semantic_refinement: bool = False
 ) -> List[Dict[str, Any]]:
     """
     Chunk a DoclingDocument with flexible metadata options.
@@ -184,6 +186,7 @@ def chunk_document(
     - Always includes curated metadata via extract_chunk_metadata()
     - Optionally includes complete Docling metadata via chunk.model_dump()
     - Optionally serializes table chunks into embedding-optimized format
+    - Optionally applies semantic chunking refinement using LlamaIndex
     
     METADATA OPTIONS:
     - Default (include_full_metadata=False):
@@ -202,6 +205,14 @@ def chunk_document(
     - Includes table caption as prefix (if available)
     - Optimized for embedding models and semantic search
     
+    SEMANTIC REFINEMENT:
+    - When semantic_refinement=True, applies LlamaIndex semantic chunking as post-processing
+    - Improves chunk boundaries for chunks that combine multiple sections
+    - Uses semantic similarity to identify better split points
+    - Preserves ALL metadata (including full_metadata with bounding boxes) from parent chunks
+    - Requires embedding_model to be specified (extracted from tokenizer.name_or_path)
+    - Applied to ALL chunks from Docling
+    
     Args:
         document: DoclingDocument to chunk
         max_tokens: Maximum tokens per chunk (default: 512)
@@ -209,6 +220,7 @@ def chunk_document(
         tokenizer: Optional tokenizer (uses HybridChunker's built-in if None)
         include_full_metadata: Include complete Docling metadata via model_dump() (default: False)
         serialize_tables: Serialize table chunks as key-value pairs for embeddings (default: False)
+        semantic_refinement: Apply semantic chunking refinement using LlamaIndex (default: False)
         
     Returns:
         List of chunk dictionaries with text, metadata, and optional full metadata
@@ -225,8 +237,12 @@ def chunk_document(
         >>> # With table serialization for embeddings
         >>> chunks = chunk_document(document, max_tokens=1024, serialize_tables=True)
         >>> # Table chunks will have key-value format text
+        
+        >>> # With semantic refinement (requires embedding_model parameter in API)
+        >>> chunks = chunk_document(document, max_tokens=1024, semantic_refinement=True, tokenizer=tokenizer)
+        >>> # Chunks are refined using semantic similarity
     """
-    logger.info(f"Starting document chunking: max_tokens={max_tokens}, merge_peers={merge_peers}, serialize_tables={serialize_tables}")
+    logger.info(f"Starting document chunking: max_tokens={max_tokens}, merge_peers={merge_peers}, serialize_tables={serialize_tables}, semantic_refinement={semantic_refinement}")
     start_time = time.time()
     
     # Initialize chunker (shared logic)
@@ -291,6 +307,27 @@ def chunk_document(
             logger.info(f"📊 Tables: {tables_serialized} serialized, {tables_failed} failed")
         else:
             logger.info(f"📊 Tables: {tables_serialized} serialized")
+    
+    # Apply semantic refinement if requested
+    if semantic_refinement:
+        if tokenizer is None:
+            logger.warning("⚠️  semantic_refinement=True but no tokenizer provided (embedding_model not specified), skipping refinement")
+        else:
+            # Extract embedding model name from tokenizer
+            embedding_model = None
+            if hasattr(tokenizer, 'name_or_path'):
+                embedding_model = tokenizer.name_or_path
+            else:
+                logger.warning("⚠️  Cannot extract embedding model name from tokenizer, skipping semantic refinement")
+            
+            if embedding_model:
+                logger.info(f"Applying semantic refinement with model: {embedding_model}")
+                chunks = semantic_refine_chunks(
+                    chunks=chunks,
+                    max_tokens=max_tokens,
+                    embedding_model=embedding_model,
+                    tokenizer=tokenizer
+                )
     
     return chunks
 
