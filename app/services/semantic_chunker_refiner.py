@@ -74,7 +74,8 @@ class SemanticChunkerRefiner:
             cache_dir = os.environ.get('HF_CACHE_DIR', './cache/huggingface')
             self.embedding_model = HuggingFaceEmbedding(
                 model_name=embedding_model,
-                cache_folder=cache_dir
+                cache_folder=cache_dir,
+                trust_remote_code=True  # Required for models with custom code like nomic-embed-text-v1.5
             )
             logger.info(f"✅ Embedding model loaded: {embedding_model}")
         except Exception as e:
