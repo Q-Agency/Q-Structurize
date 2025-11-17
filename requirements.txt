@@ -1,7 +1,7 @@
 fastapi[standard]==0.118.0
 uvicorn==0.24.0
 pikepdf==8.7.0
-docling==2.61.1
+docling==2.62.0
 # Transformers for HuggingFace tokenizers (used for custom embedding model tokenization)
 transformers>=4.30.0
 # LlamaIndex for semantic chunking refinement
