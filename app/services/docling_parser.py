@@ -62,6 +62,7 @@ try:
     from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
     from docling.datamodel.settings import settings
     from docling.pipeline.threaded_standard_pdf_pipeline import ThreadedStandardPdfPipeline
+    from docling.utils.model_downloader import download_models
     settings.perf.page_batch_size = int(os.environ.get('DOCLING_PAGE_BATCH_SIZE', '12'))
     DOCLING_AVAILABLE = True
 except ImportError as e:
@@ -75,6 +76,7 @@ except ImportError as e:
     ThreadedPdfPipelineOptions = None
     AcceleratorOptions = None
     AcceleratorDevice = None
+    download_models = None
     logger.error(f"Failed to import docling: {e}")
 
 
@@ -160,6 +162,7 @@ class DoclingParser:
             self.converter.initialize_pipeline(InputFormat.PDF)
             init_time = time.time() - init_start
             logger.info(f"✅ Converter initialized in {init_time:.2f}s (models cached in memory)")
+            self._pipeline_initialized = True
         except (FileNotFoundError, OSError) as e:
             # Models not available yet - will initialize lazily on first use
             logger.warning(f"⚠️  Models not available at startup: {str(e)}")
@@ -170,8 +173,6 @@ class DoclingParser:
             logger.warning(f"⚠️  Pipeline initialization failed: {str(e)}")
             logger.info("📦 Pipeline will initialize lazily on first PDF conversion")
             self._pipeline_initialized = False
-        else:
-            self._pipeline_initialized = True
     
     def _create_pipeline_options(self, user_options: Dict[str, Any]) -> ThreadedPdfPipelineOptions:
         """
@@ -251,6 +252,41 @@ class DoclingParser:
                 self.converter.initialize_pipeline(InputFormat.PDF)
                 self._pipeline_initialized = True
                 logger.info("✅ Pipeline initialized successfully")
+            except (FileNotFoundError, OSError) as e:
+                # Models missing - try to download them
+                error_msg = str(e)
+                if "safetensors" in error_msg.lower() or "model" in error_msg.lower():
+                    logger.warning(f"⚠️  Models missing: {error_msg}")
+                    logger.info("📥 Attempting to download required models...")
+                    try:
+                        if download_models is not None:
+                            # Download only the models we need based on configuration
+                            download_models(
+                                output_dir=None,  # Uses settings.cache_dir / "models"
+                                force=False,
+                                progress=True,
+                                with_layout=True,
+                                with_tableformer=self.default_config.get("do_table_structure", False),
+                                with_code_formula=self.default_config.get("do_code_enrichment", False),
+                                with_picture_classifier=self.default_config.get("do_picture_classification", False),
+                                with_rapidocr=self.default_config.get("enable_ocr", False),
+                                with_easyocr=False,
+                            )
+                            logger.info("✅ Models downloaded, retrying pipeline initialization...")
+                            self.converter.initialize_pipeline(InputFormat.PDF)
+                            self._pipeline_initialized = True
+                            logger.info("✅ Pipeline initialized successfully after model download")
+                        else:
+                            raise RuntimeError("Model downloader not available")
+                    except Exception as download_error:
+                        logger.error(f"❌ Failed to download models: {str(download_error)}")
+                        return {
+                            "success": False,
+                            "error": f"Models missing and download failed: {str(download_error)}. Please run 'docling-tools models download' or ensure models are available.",
+                            "content": None
+                        }
+                else:
+                    raise
             except Exception as e:
                 logger.error(f"❌ Failed to initialize pipeline: {str(e)}")
                 return {
@@ -330,6 +366,37 @@ class DoclingParser:
                 self.converter.initialize_pipeline(InputFormat.PDF)
                 self._pipeline_initialized = True
                 logger.info("✅ Pipeline initialized successfully")
+            except (FileNotFoundError, OSError) as e:
+                # Models missing - try to download them
+                error_msg = str(e)
+                if "safetensors" in error_msg.lower() or "model" in error_msg.lower():
+                    logger.warning(f"⚠️  Models missing: {error_msg}")
+                    logger.info("📥 Attempting to download required models...")
+                    try:
+                        if download_models is not None:
+                            # Download only the models we need based on configuration
+                            download_models(
+                                output_dir=None,  # Uses settings.cache_dir / "models"
+                                force=False,
+                                progress=True,
+                                with_layout=True,
+                                with_tableformer=self.default_config.get("do_table_structure", False),
+                                with_code_formula=self.default_config.get("do_code_enrichment", False),
+                                with_picture_classifier=self.default_config.get("do_picture_classification", False),
+                                with_rapidocr=self.default_config.get("enable_ocr", False),
+                                with_easyocr=False,
+                            )
+                            logger.info("✅ Models downloaded, retrying pipeline initialization...")
+                            self.converter.initialize_pipeline(InputFormat.PDF)
+                            self._pipeline_initialized = True
+                            logger.info("✅ Pipeline initialized successfully after model download")
+                        else:
+                            raise RuntimeError("Model downloader not available")
+                    except Exception as download_error:
+                        logger.error(f"❌ Failed to download models: {str(download_error)}")
+                        raise RuntimeError(f"Models missing and download failed: {str(download_error)}. Please run 'docling-tools models download' or ensure models are available.") from download_error
+                else:
+                    raise
             except Exception as e:
                 logger.error(f"❌ Failed to initialize pipeline: {str(e)}")
                 raise RuntimeError(f"Pipeline initialization failed: {str(e)}") from e
