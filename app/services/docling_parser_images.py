@@ -106,8 +106,8 @@ class DoclingParserImages:
             # Model selection: 'smolvlm', 'granite', 'api', or 'custom'
             "model": os.environ.get('DOCLING_PICTURE_DESCRIPTION_MODEL', 'smolvlm').lower(),
             
-            # Custom prompt (optional)
-            "prompt": os.environ.get('DOCLING_PICTURE_DESCRIPTION_PROMPT', ''),
+            # Custom prompt (optional) - strip whitespace to handle Docker ENV formatting
+            "prompt": os.environ.get('DOCLING_PICTURE_DESCRIPTION_PROMPT', '').strip(),
             
             # API configuration (for API-based models like GPT-4 Vision)
             "api_url": os.environ.get('DOCLING_PICTURE_DESCRIPTION_API_URL', ''),
@@ -139,6 +139,10 @@ class DoclingParserImages:
         # Initialize converter with image description enabled
         logger.info("🚀 Initializing Docling DocumentConverter with image description support")
         logger.info(f"📸 Image description model: {self.image_config['model']}")
+        if self.image_config.get('prompt'):
+            logger.info(f"📝 Custom prompt configured: '{self.image_config['prompt']}'")
+        else:
+            logger.info("📝 Using default model prompt")
         
         init_start = time.time()
         
@@ -231,6 +235,8 @@ class DoclingParserImages:
             api_timeout = user_options.get("api_timeout", 90.0)
             custom_prompt = user_options.get("prompt", "Describe this image in a few sentences.")
             
+            logger.info(f"🔧 API model prompt: '{custom_prompt}'")
+            
             if not api_url:
                 logger.warning("⚠️  API URL not provided, falling back to SmolVLM")
                 pipeline_options.picture_description_options = smolvlm_picture_description
@@ -259,10 +265,10 @@ class DoclingParserImages:
                     repo_id=granite_picture_description.repo_id,
                     prompt=custom_prompt,
                 )
+                logger.info(f"✅ Configured Granite Vision model with custom prompt: '{custom_prompt}'")
             else:
                 pipeline_options.picture_description_options = granite_picture_description
-            
-            logger.info("✅ Configured Granite Vision model for image description")
+                logger.info("✅ Configured Granite Vision model with default prompt")
             
             # Download model if needed (will happen lazily on first use)
             try:
@@ -299,10 +305,10 @@ class DoclingParserImages:
                     repo_id=smolvlm_picture_description.repo_id,
                     prompt=custom_prompt,
                 )
+                logger.info(f"✅ Configured SmolVLM model with custom prompt: '{custom_prompt}'")
             else:
                 pipeline_options.picture_description_options = smolvlm_picture_description
-            
-            logger.info("✅ Configured SmolVLM model for image description")
+                logger.info("✅ Configured SmolVLM model with default prompt")
             
             # Download model if needed (will happen lazily on first use)
             try:
