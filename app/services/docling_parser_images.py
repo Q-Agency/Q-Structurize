@@ -426,7 +426,9 @@ class DoclingParserImages:
                     # Extract text from annotations (may be DescriptionAnnotation objects)
                     annotation_texts = []
                     annotations = getattr(element, 'annotations', [])
+                    annotation_types = []
                     for ann in annotations:
+                        annotation_types.append(type(ann).__name__)
                         if isinstance(ann, str):
                             annotation_texts.append(ann)
                         else:
@@ -484,7 +486,25 @@ class DoclingParserImages:
                         })
                     else:
                         page_info = f" (page {page_num})" if page_num is not None else ""
-                        logger.debug(f"📸 Image {picture_count} ({image_ref}){page_info}: No description available")
+                        # Log diagnostic info for images without descriptions
+                        has_annotations = len(annotations) > 0
+                        annotation_info = f" ({len(annotations)} annotations: {', '.join(annotation_types[:3])})" if has_annotations else " (no annotations)"
+                        logger.info(f"📸 Image {picture_count} ({image_ref}){page_info}: No description available{annotation_info}")
+                        
+                        # Log additional diagnostic info at DEBUG level
+                        logger.debug(f"   - Caption available: {caption is not None}")
+                        logger.debug(f"   - Annotations count: {len(annotations)}")
+                        if annotations:
+                            logger.debug(f"   - Annotation types: {[type(a).__name__ for a in annotations]}")
+                        # Check for image properties that might affect description
+                        try:
+                            if hasattr(element, 'bbox'):
+                                bbox = element.bbox
+                                logger.debug(f"   - Bounding box: {bbox}")
+                            if hasattr(element, 'image'):
+                                logger.debug(f"   - Has image data: {element.image is not None}")
+                        except Exception:
+                            pass
             
             # Log summary
             if picture_count > 0:
@@ -535,7 +555,10 @@ class DoclingParserImages:
             processing_start = time.time()
             doc_stream = DocumentStream(name="document.pdf", stream=BytesIO(pdf_content))
             
-            logger.info(f"📄 Processing PDF with image descriptions ({len(pdf_content):,} bytes)")
+            # Log configuration being used
+            model_info = f"model={self.image_config.get('model', 'N/A')}"
+            prompt_info = f"prompt='{self.image_config.get('prompt', 'default')}'" if self.image_config.get('prompt') else "prompt=default"
+            logger.info(f"📄 Processing PDF with image descriptions ({len(pdf_content):,} bytes) - {model_info}, {prompt_info}")
             
             result = self.converter.convert(source=doc_stream)
             conversion_time = time.time() - processing_start
