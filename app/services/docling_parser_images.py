@@ -8,6 +8,7 @@ import os
 import logging
 import time
 import sys
+import re
 from io import BytesIO
 from typing import Optional, Dict, Any
 
@@ -317,6 +318,77 @@ class DoclingParserImages:
         
         return pipeline_options
     
+    def _deduplicate_markdown(self, markdown_content: str) -> str:
+        """
+        Remove repetitive sentences/phrases from markdown content.
+        
+        This handles cases where image descriptions or other content
+        gets duplicated in the markdown export.
+        
+        Args:
+            markdown_content: Original markdown content
+            
+        Returns:
+            Deduplicated markdown content
+        """
+        if not markdown_content:
+            return markdown_content
+        
+        # Split into sentences (handle . ! ? endings)
+        # Use a regex to split on sentence boundaries while preserving punctuation
+        sentences = re.split(r'([.!?]\s+)', markdown_content)
+        
+        # Reconstruct sentences (alternating between text and separators)
+        seen_sentences = set()
+        deduplicated_parts = []
+        
+        i = 0
+        while i < len(sentences):
+            if i + 1 < len(sentences):
+                # We have text + separator
+                sentence_text = sentences[i].strip()
+                separator = sentences[i + 1]
+                
+                if sentence_text:
+                    # Normalize for comparison: lowercase, remove extra whitespace
+                    normalized = ' '.join(sentence_text.lower().split())
+                    
+                    # Only add if we haven't seen this exact sentence before
+                    if normalized not in seen_sentences:
+                        deduplicated_parts.append(sentence_text + separator)
+                        seen_sentences.add(normalized)
+                        # Keep a sliding window of last 20 sentences to avoid memory growth
+                        if len(seen_sentences) > 20:
+                            # Convert to list, keep last 15, convert back to set
+                            seen_list = list(seen_sentences)
+                            seen_sentences = set(seen_list[-15:])
+                    # else: skip this duplicate sentence
+                else:
+                    # Empty text, keep separator if it exists
+                    deduplicated_parts.append(separator)
+                
+                i += 2
+            else:
+                # Last item (no separator after it)
+                sentence_text = sentences[i].strip()
+                if sentence_text:
+                    normalized = ' '.join(sentence_text.lower().split())
+                    if normalized not in seen_sentences:
+                        deduplicated_parts.append(sentence_text)
+                        seen_sentences.add(normalized)
+                break
+        
+        result = ''.join(deduplicated_parts)
+        
+        # Log if we removed significant content
+        original_len = len(markdown_content)
+        new_len = len(result)
+        if original_len > new_len * 1.1:  # More than 10% reduction
+            reduction_pct = ((original_len - new_len) / original_len) * 100
+            logger.info(f"🔧 Removed {reduction_pct:.1f}% duplicate content ({original_len:,} -> {new_len:,} chars)")
+        
+        return result
+    
     def _log_image_descriptions(self, document):
         """
         Log information about images and their descriptions in the document.
@@ -470,6 +542,10 @@ class DoclingParserImages:
             self._log_image_descriptions(document)
             
             markdown_content = document.export_to_markdown()
+            
+            # Deduplicate repetitive content (especially image descriptions)
+            markdown_content = self._deduplicate_markdown(markdown_content)
+            
             export_time = time.time() - export_start
             
             total_time = time.time() - processing_start
