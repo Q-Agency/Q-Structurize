@@ -28,14 +28,6 @@ from docling_core.types.doc.document import DoclingDocument
 from app.services.table_serializer import serialize_table_from_chunk
 from app.services.semantic_chunker_refiner import refine_chunks as semantic_refine_chunks
 
-# Try to import PictureItem for image detection (optional)
-try:
-    from docling_core.types.doc import PictureItem
-    PICTURE_ITEM_AVAILABLE = True
-except ImportError:
-    PictureItem = None
-    PICTURE_ITEM_AVAILABLE = False
-
 logger = logging.getLogger(__name__)
 
 # Export public API
@@ -133,30 +125,15 @@ def extract_chunk_metadata(chunk: BaseChunk) -> Dict[str, Any]:
     """
     metadata = {}
     
-    # Extract content type from doc_items and detect images
+    # Extract content type from doc_items
     content_type = "text"  # default
-    image_count = 0
-    has_image_descriptions = False
-    
     if hasattr(chunk.meta, "doc_items") and chunk.meta.doc_items:
         types = set()
         for item in chunk.meta.doc_items:
-            # Check label
             if hasattr(item, "label"):
                 types.add(item.label)
-                if item.label == "picture":
-                    image_count += 1
-                    has_image_descriptions = True
-            # Check type (if PictureItem is available)
-            elif PICTURE_ITEM_AVAILABLE and PictureItem is not None and isinstance(item, PictureItem):
-                image_count += 1
-                has_image_descriptions = True
         
-        # Priority: image > table > list > heading > text
-        # Check if chunk contains only images (no other dominant type)
-        if has_image_descriptions and len(types) == 1 and "picture" in types:
-            content_type = "image"
-        elif "table" in types:
+        if "table" in types:
             content_type = "table"
         elif "list_item" in types:
             content_type = "list"
@@ -164,9 +141,6 @@ def extract_chunk_metadata(chunk: BaseChunk) -> Dict[str, Any]:
             content_type = "heading"
     
     metadata["content_type"] = content_type
-    metadata["has_image_descriptions"] = has_image_descriptions
-    if image_count > 0:
-        metadata["image_count"] = image_count
     
     # Extract heading path (breadcrumb)
     if hasattr(chunk.meta, "headings") and chunk.meta.headings:
