@@ -331,6 +331,9 @@ class DoclingParserImages:
         This handles cases where image descriptions or other content
         gets duplicated in the markdown export.
         
+        Image markdown syntax (![...](...)) is excluded from deduplication
+        to preserve image descriptions.
+        
         Args:
             markdown_content: Original markdown content
             
@@ -340,9 +343,37 @@ class DoclingParserImages:
         if not markdown_content:
             return markdown_content
         
+        # Extract image markdown blocks to preserve them
+        # Pattern matches: ![alt text](path) or ![alt text]
+        image_pattern = r'!\[([^\]]*)\]\(([^)]*)\)|!\[([^\]]*)\]'
+        image_blocks = []
+        image_positions = []
+        
+        # Find all image markdown blocks and their positions
+        for match in re.finditer(image_pattern, markdown_content):
+            image_blocks.append(match.group(0))
+            image_positions.append((match.start(), match.end()))
+        
+        # Replace image blocks with placeholders to exclude from deduplication
+        placeholder_prefix = "___IMAGE_PLACEHOLDER_"
+        text_with_placeholders = markdown_content
+        offset = 0
+        
+        for idx, (start, end) in enumerate(image_positions):
+            placeholder = f"{placeholder_prefix}{idx}___"
+            # Adjust positions based on previous replacements
+            adjusted_start = start + offset
+            adjusted_end = end + offset
+            text_with_placeholders = (
+                text_with_placeholders[:adjusted_start] +
+                placeholder +
+                text_with_placeholders[adjusted_end:]
+            )
+            offset += len(placeholder) - (end - start)
+        
         # Split into sentences (handle . ! ? endings)
         # Use a regex to split on sentence boundaries while preserving punctuation
-        sentences = re.split(r'([.!?]\s+)', markdown_content)
+        sentences = re.split(r'([.!?]\s+)', text_with_placeholders)
         
         # Reconstruct sentences (alternating between text and separators)
         seen_sentences = set()
@@ -356,19 +387,23 @@ class DoclingParserImages:
                 separator = sentences[i + 1]
                 
                 if sentence_text:
-                    # Normalize for comparison: lowercase, remove extra whitespace
-                    normalized = ' '.join(sentence_text.lower().split())
-                    
-                    # Only add if we haven't seen this exact sentence before
-                    if normalized not in seen_sentences:
+                    # Skip deduplication for image placeholders (preserve them)
+                    if placeholder_prefix in sentence_text:
                         deduplicated_parts.append(sentence_text + separator)
-                        seen_sentences.add(normalized)
-                        # Keep a sliding window of last 20 sentences to avoid memory growth
-                        if len(seen_sentences) > 20:
-                            # Convert to list, keep last 15, convert back to set
-                            seen_list = list(seen_sentences)
-                            seen_sentences = set(seen_list[-15:])
-                    # else: skip this duplicate sentence
+                    else:
+                        # Normalize for comparison: lowercase, remove extra whitespace
+                        normalized = ' '.join(sentence_text.lower().split())
+                        
+                        # Only add if we haven't seen this exact sentence before
+                        if normalized not in seen_sentences:
+                            deduplicated_parts.append(sentence_text + separator)
+                            seen_sentences.add(normalized)
+                            # Keep a sliding window of last 20 sentences to avoid memory growth
+                            if len(seen_sentences) > 20:
+                                # Convert to list, keep last 15, convert back to set
+                                seen_list = list(seen_sentences)
+                                seen_sentences = set(seen_list[-15:])
+                        # else: skip this duplicate sentence
                 else:
                     # Empty text, keep separator if it exists
                     deduplicated_parts.append(separator)
@@ -378,13 +413,22 @@ class DoclingParserImages:
                 # Last item (no separator after it)
                 sentence_text = sentences[i].strip()
                 if sentence_text:
-                    normalized = ' '.join(sentence_text.lower().split())
-                    if normalized not in seen_sentences:
+                    # Skip deduplication for image placeholders
+                    if placeholder_prefix in sentence_text:
                         deduplicated_parts.append(sentence_text)
-                        seen_sentences.add(normalized)
+                    else:
+                        normalized = ' '.join(sentence_text.lower().split())
+                        if normalized not in seen_sentences:
+                            deduplicated_parts.append(sentence_text)
+                            seen_sentences.add(normalized)
                 break
         
         result = ''.join(deduplicated_parts)
+        
+        # Restore image blocks from placeholders
+        for idx, image_block in enumerate(image_blocks):
+            placeholder = f"{placeholder_prefix}{idx}___"
+            result = result.replace(placeholder, image_block, 1)
         
         # Log if we removed significant content
         original_len = len(markdown_content)
@@ -453,7 +497,8 @@ class DoclingParserImages:
                     if caption:
                         desc_text = caption
                     elif annotation_texts:
-                        desc_text = annotation_texts[0]  # Use first annotation
+                        # Filter out empty strings and join all annotations with spaces
+                        desc_text = " ".join([ann for ann in annotation_texts if ann.strip()])
                     
                     # Check if image has description
                     has_description = bool(desc_text)
