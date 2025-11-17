@@ -2,7 +2,6 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from typing import Optional
 from pydantic import BaseModel
 import logging
-import inspect
 from app.services.pdf_optimizer import PDFOptimizer
 from app.services.docling_parser import DoclingParser
 from app.services import hybrid_chunker
@@ -87,8 +86,7 @@ async def parse_pdf_file(
     include_full_metadata: bool = Form(False, description="Include complete Docling metadata (model_dump) in addition to curated metadata"),
     serialize_tables: bool = Form(False, description="Serialize table chunks as key-value pairs optimized for embeddings (extracts tables from document structure)"),
     semantic_refinement: bool = Form(False, description="Apply LlamaIndex semantic chunking refinement to improve chunk boundaries. Requires embedding_model to be specified."),
-    parse_images: bool = Form(False, description="Enable image description for images in PDF (requires VLM model or API key configured via environment variables)"),
-    image_description_prompt: Optional[str] = Form(None, description="Custom prompt for image description (e.g., 'Describe the image in one word' or 'Describe the image in detail.'). If not provided, uses prompt from environment variable DOCLING_PICTURE_DESCRIPTION_PROMPT or model default.")
+    parse_images: bool = Form(False, description="Enable image description for images in PDF (requires VLM model or API key configured via environment variables)")
 ):
     # Validate file type
     if not file.content_type or not file.content_type.startswith('application/pdf'):
@@ -124,25 +122,10 @@ async def parse_pdf_file(
                 detail="Docling parser is not available. Please check dependencies."
             )
         
-        # Prepare config override for image description prompt if provided
-        config_override = None
-        if parse_images and image_description_prompt:
-            config_override = {"prompt": image_description_prompt.strip()}
-            logger.info(f"📝 Using custom image description prompt from API: '{image_description_prompt}'")
-        
         # Branch: Chunking vs Standard Markdown
         if enable_chunking:
             # Parse to DoclingDocument object
-            # Check if parser supports config_override (image parser)
-            if hasattr(parser, 'parse_pdf_to_document') and config_override:
-                # Check if method signature accepts config_override
-                sig = inspect.signature(parser.parse_pdf_to_document)
-                if 'config_override' in sig.parameters:
-                    document = parser.parse_pdf_to_document(pdf_content, config_override=config_override)
-                else:
-                    document = parser.parse_pdf_to_document(pdf_content)
-            else:
-                document = parser.parse_pdf_to_document(pdf_content)
+            document = parser.parse_pdf_to_document(pdf_content)
             
             # Load tokenizer if embedding model is specified
             tokenizer = None
@@ -190,16 +173,7 @@ async def parse_pdf_file(
             )
         else:
             # Standard markdown parsing
-            # Check if parser supports config_override (image parser)
-            if hasattr(parser, 'parse_pdf') and config_override:
-                # Check if method signature accepts config_override
-                sig = inspect.signature(parser.parse_pdf)
-                if 'config_override' in sig.parameters:
-                    parse_result = parser.parse_pdf(pdf_content, config_override=config_override)
-                else:
-                    parse_result = parser.parse_pdf(pdf_content)
-            else:
-                parse_result = parser.parse_pdf(pdf_content)
+            parse_result = parser.parse_pdf(pdf_content)
             
             if not parse_result["success"]:
                 raise HTTPException(

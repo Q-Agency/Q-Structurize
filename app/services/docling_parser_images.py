@@ -518,83 +518,48 @@ class DoclingParserImages:
         except Exception as e:
             logger.warning(f"⚠️  Could not log image descriptions: {str(e)}")
     
-    def parse_pdf(self, pdf_content: bytes, config_override: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def parse_pdf(self, pdf_content: bytes) -> Dict[str, Any]:
         """
         Parse PDF content with image descriptions enabled.
         
         Args:
             pdf_content: PDF file content as bytes
-            config_override: Optional configuration override (e.g., custom prompt)
             
         Returns:
             Dictionary with success status, content (markdown), and error if any
         """
-        if not DOCLING_AVAILABLE:
+        if not DOCLING_AVAILABLE or self.converter is None:
             return {
                 "success": False,
                 "error": "Docling image description is not available",
                 "content": None
             }
         
-        # Merge config override if provided
-        effective_config = self.image_config.copy()
-        if config_override:
-            effective_config.update(config_override)
-            # If prompt changed, we need a new converter instance
-            if config_override.get('prompt') and config_override.get('prompt') != self.image_config.get('prompt'):
-                logger.info(f"🔄 Creating new converter with custom prompt: '{config_override.get('prompt')}'")
-                try:
-                    # Create temporary converter with custom prompt
-                    temp_pipeline_options = self._create_pipeline_options(effective_config)
-                    temp_converter = DocumentConverter(
-                        format_options={
-                            InputFormat.PDF: PdfFormatOption(
-                                pipeline_cls=ThreadedStandardPdfPipeline,
-                                pipeline_options=temp_pipeline_options,
-                            ),
-                        }
-                    )
-                    converter = temp_converter
-                except Exception as e:
-                    logger.error(f"❌ Failed to create converter with custom prompt: {str(e)}")
-                    return {
-                        "success": False,
-                        "error": f"Failed to create converter with custom prompt: {str(e)}",
-                        "content": None
-                    }
-            else:
-                converter = self.converter
-        else:
-            converter = self.converter
-        
-        if converter is None:
-            return {
-                "success": False,
-                "error": "Docling image description converter is not available",
-                "content": None
-            }
-        
         # Ensure pipeline is initialized
-        try:
-            converter.initialize_pipeline(InputFormat.PDF)
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize image-enabled pipeline: {str(e)}")
-            return {
-                "success": False,
-                "error": f"Pipeline initialization failed: {str(e)}",
-                "content": None
-            }
+        if not getattr(self, '_pipeline_initialized', True):
+            try:
+                logger.info("🔄 Initializing image-enabled pipeline on first use...")
+                self.converter.initialize_pipeline(InputFormat.PDF)
+                self._pipeline_initialized = True
+                logger.info("✅ Image-enabled pipeline initialized successfully")
+            except Exception as e:
+                logger.error(f"❌ Failed to initialize image-enabled pipeline: {str(e)}")
+                return {
+                    "success": False,
+                    "error": f"Pipeline initialization failed: {str(e)}",
+                    "content": None
+                }
         
         try:
             processing_start = time.time()
             doc_stream = DocumentStream(name="document.pdf", stream=BytesIO(pdf_content))
             
             # Log configuration being used
-            model_info = f"model={effective_config.get('model', 'N/A')}"
-            prompt_info = f"prompt='{effective_config.get('prompt', 'default')}'" if effective_config.get('prompt') else "prompt=default"
+            model_info = f"model={self.image_config.get('model', 'N/A')}"
+            prompt_info = f"prompt='{self.image_config.get('prompt', 'default')}'" if self.image_config.get('prompt') else "prompt=default"
             logger.info(f"📄 Processing PDF with image descriptions ({len(pdf_content):,} bytes) - {model_info}, {prompt_info}")
             
-            result = converter.convert(source=doc_stream)
+            result = self.converter.convert(source=doc_stream)
             conversion_time = time.time() - processing_start
             
             # Extract content - export to markdown
@@ -635,13 +600,12 @@ class DoclingParserImages:
                 "content": None
             }
     
-    def parse_pdf_to_document(self, pdf_content: bytes, config_override: Optional[Dict[str, Any]] = None):
+    def parse_pdf_to_document(self, pdf_content: bytes):
         """
         Parse PDF content and return DoclingDocument object with image descriptions.
         
         Args:
             pdf_content: PDF file content as bytes
-            config_override: Optional configuration override (e.g., custom prompt)
             
         Returns:
             DoclingDocument object if successful
@@ -649,57 +613,28 @@ class DoclingParserImages:
         Raises:
             RuntimeError: If Docling is not available or conversion fails
         """
-        if not DOCLING_AVAILABLE:
+        if not DOCLING_AVAILABLE or self.converter is None:
             raise RuntimeError("Docling image description is not available")
         
-        # Merge config override if provided
-        effective_config = self.image_config.copy()
-        if config_override:
-            effective_config.update(config_override)
-            # If prompt changed, we need a new converter instance
-            if config_override.get('prompt') and config_override.get('prompt') != self.image_config.get('prompt'):
-                logger.info(f"🔄 Creating new converter with custom prompt: '{config_override.get('prompt')}'")
-                try:
-                    # Create temporary converter with custom prompt
-                    temp_pipeline_options = self._create_pipeline_options(effective_config)
-                    temp_converter = DocumentConverter(
-                        format_options={
-                            InputFormat.PDF: PdfFormatOption(
-                                pipeline_cls=ThreadedStandardPdfPipeline,
-                                pipeline_options=temp_pipeline_options,
-                            ),
-                        }
-                    )
-                    converter = temp_converter
-                except Exception as e:
-                    logger.error(f"❌ Failed to create converter with custom prompt: {str(e)}")
-                    raise RuntimeError(f"Failed to create converter with custom prompt: {str(e)}") from e
-            else:
-                converter = self.converter
-        else:
-            converter = self.converter
-        
-        if converter is None:
-            raise RuntimeError("Docling image description converter is not available")
-        
         # Ensure pipeline is initialized
-        try:
-            converter.initialize_pipeline(InputFormat.PDF)
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize image-enabled pipeline: {str(e)}")
-            raise RuntimeError(f"Pipeline initialization failed: {str(e)}") from e
+        if not getattr(self, '_pipeline_initialized', True):
+            try:
+                logger.info("🔄 Initializing image-enabled pipeline on first use...")
+                self.converter.initialize_pipeline(InputFormat.PDF)
+                self._pipeline_initialized = True
+                logger.info("✅ Image-enabled pipeline initialized successfully")
+            except Exception as e:
+                logger.error(f"❌ Failed to initialize image-enabled pipeline: {str(e)}")
+                raise RuntimeError(f"Pipeline initialization failed: {str(e)}") from e
         
         try:
             parse_start = time.time()
             doc_stream = DocumentStream(name="document.pdf", stream=BytesIO(pdf_content))
             
-            # Log configuration being used
-            model_info = f"model={effective_config.get('model', 'N/A')}"
-            prompt_info = f"prompt='{effective_config.get('prompt', 'default')}'" if effective_config.get('prompt') else "prompt=default"
-            logger.info(f"📄 Parsing PDF to document with image descriptions ({len(pdf_content):,} bytes) - {model_info}, {prompt_info}")
+            logger.info(f"📄 Parsing PDF to document with image descriptions ({len(pdf_content):,} bytes)")
             
             conversion_start = time.time()
-            result = converter.convert(source=doc_stream)
+            result = self.converter.convert(source=doc_stream)
             conversion_time = time.time() - conversion_start
             
             # Log image descriptions
