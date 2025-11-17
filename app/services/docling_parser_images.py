@@ -345,10 +345,38 @@ class DoclingParserImages:
                     except Exception:
                         pass
                     
+                    # Extract text from annotations (may be DescriptionAnnotation objects)
+                    annotation_texts = []
                     annotations = getattr(element, 'annotations', [])
+                    for ann in annotations:
+                        if isinstance(ann, str):
+                            annotation_texts.append(ann)
+                        else:
+                            # Try common attributes for DescriptionAnnotation objects
+                            for attr in ['text', 'content', 'description', 'value', 'annotation']:
+                                if hasattr(ann, attr):
+                                    text = getattr(ann, attr)
+                                    if isinstance(text, str) and text.strip():
+                                        annotation_texts.append(text)
+                                        break
+                            # If no text attribute found, try converting to string
+                            if not annotation_texts:
+                                try:
+                                    text = str(ann)
+                                    if text and text.strip() and text != str(type(ann)):
+                                        annotation_texts.append(text)
+                                except Exception:
+                                    pass
+                    
+                    # Combine caption and annotations
+                    desc_text = None
+                    if caption:
+                        desc_text = caption
+                    elif annotation_texts:
+                        desc_text = annotation_texts[0]  # Use first annotation
                     
                     # Check if image has description
-                    has_description = bool(caption or annotations)
+                    has_description = bool(desc_text)
                     if has_description:
                         described_count += 1
                     
@@ -367,7 +395,6 @@ class DoclingParserImages:
                     
                     # Log individual image info
                     if has_description:
-                        desc_text = caption if caption else (annotations[0] if annotations else "Description available")
                         # Truncate long descriptions for logging
                         desc_preview = desc_text[:150] + "..." if len(desc_text) > 150 else desc_text
                         page_info = f" (page {page_num})" if page_num is not None else ""
