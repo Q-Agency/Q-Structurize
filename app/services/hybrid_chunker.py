@@ -428,23 +428,66 @@ def chunk_document(
         contextualized_text, prefixed_text = _process_chunk_text(chunker, chunk)
         
         # Check if this chunk contains any PictureItems and ensure their descriptions are complete
+        # First, check doc_items for picture references
+        chunk_has_image = False
+        image_refs_in_chunk = []
         if image_descriptions_map and hasattr(chunk, 'meta') and hasattr(chunk.meta, 'doc_items'):
-            # Check doc_items for PictureItems
             for item in chunk.meta.doc_items:
-                # Try to get image reference from item
-                image_ref = None
-                if hasattr(item, 'self_ref'):
-                    image_ref = str(item.self_ref)
-                elif hasattr(item, 'ref'):
-                    image_ref = str(item.ref)
-                elif hasattr(item, 'label') and item.label == 'picture':
-                    # Try to find ref in item attributes
-                    for attr in ['self_ref', 'ref', 'id', 'item_id']:
-                        if hasattr(item, attr):
-                            image_ref = str(getattr(item, attr))
-                            break
-                
-                if image_ref and image_ref in image_descriptions_map:
+                # Check if item is a picture by label
+                if hasattr(item, 'label') and item.label == 'picture':
+                    chunk_has_image = True
+                    # Try to get image reference from item
+                    image_ref = None
+                    if hasattr(item, 'self_ref'):
+                        image_ref = str(item.self_ref)
+                    elif hasattr(item, 'ref'):
+                        image_ref = str(item.ref)
+                    else:
+                        # Try to find ref in item attributes
+                        for attr in ['self_ref', 'ref', 'id', 'item_id']:
+                            if hasattr(item, attr):
+                                image_ref = str(getattr(item, attr))
+                                break
+                    
+                    if image_ref:
+                        image_refs_in_chunk.append(image_ref)
+        
+        # Also check the contextualized text for partial image descriptions
+        # This catches cases where the description is in the text but truncated
+        contextualized_lower = contextualized_text.lower()
+        for image_ref, full_description in image_descriptions_map.items():
+            # Check if any part of this description appears in the chunk text
+            # Use first 50-100 chars as prefix (shorter for better matching)
+            desc_prefix_len = min(100, max(50, len(full_description) // 4))
+            desc_prefix = full_description[:desc_prefix_len].lower().strip()
+            
+            if len(desc_prefix) >= 30 and desc_prefix in contextualized_lower:
+                # Description appears in chunk - check if it's complete
+                if full_description.lower() not in contextualized_lower:
+                    # Description is truncated - find where it starts
+                    desc_start = contextualized_lower.find(desc_prefix)
+                    if desc_start >= 0:
+                        # Get the truncated portion
+                        truncated_portion = contextualized_text[desc_start:]
+                        # Get text before the description
+                        text_before = contextualized_text[:desc_start].rstrip()
+                        
+                        # Replace truncated portion with full description
+                        if text_before:
+                            contextualized_text = f"{text_before}\n\n{full_description}"
+                        else:
+                            contextualized_text = full_description
+                        prefixed_text = f"search_document: {contextualized_text}"
+                        
+                        logger.info(f"🔧 Preserved complete image description for {image_ref} in chunk {chunk_idx}")
+                        logger.debug(f"   - Truncated portion was: {truncated_portion[:100]}...")
+                        logger.debug(f"   - Full description length: {len(full_description)} chars")
+                        break  # Only handle one per chunk
+        
+        # Also check doc_items-based detection
+        if image_refs_in_chunk:
+            for image_ref in image_refs_in_chunk:
+                if image_ref in image_descriptions_map:
                     full_description = image_descriptions_map[image_ref]
                     # Check if the full description is in the contextualized text
                     if full_description.lower() not in contextualized_text.lower():
@@ -454,7 +497,8 @@ def chunk_document(
                         else:
                             contextualized_text = full_description
                         prefixed_text = f"search_document: {contextualized_text}"
-                        logger.info(f"🔧 Added complete image description for {image_ref} to chunk {chunk_idx}")
+                        logger.info(f"🔧 Added complete image description for {image_ref} to chunk {chunk_idx} (from doc_items)")
+                        break  # Only handle one per chunk
         
         # Extract section title from headings (most specific heading)
         section_title = None
