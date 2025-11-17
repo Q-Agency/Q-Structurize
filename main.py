@@ -22,6 +22,26 @@ logger = logging.getLogger(__name__)
 pdf_optimizer = PDFOptimizer()
 docling_parser = DoclingParser()
 
+# Lazy initialization for image description parser (only created when needed)
+docling_parser_images = None
+
+def get_image_parser():
+    """Lazy initialization of image description parser."""
+    global docling_parser_images
+    if docling_parser_images is None:
+        try:
+            from app.services.docling_parser_images import DoclingParserImages
+            docling_parser_images = DoclingParserImages()
+            if not docling_parser_images.is_available():
+                logger.warning("⚠️  Image description parser is not available")
+                docling_parser_images = None
+            else:
+                logger.info("✅ Image description parser initialized")
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to initialize image description parser: {str(e)}")
+            docling_parser_images = None
+    return docling_parser_images
+
 
 app = FastAPI(
     title="Q-Structurize",
@@ -65,7 +85,8 @@ async def parse_pdf_file(
     include_markdown: bool = Form(False, description="Include full markdown content when chunking is enabled"),
     include_full_metadata: bool = Form(False, description="Include complete Docling metadata (model_dump) in addition to curated metadata"),
     serialize_tables: bool = Form(False, description="Serialize table chunks as key-value pairs optimized for embeddings (extracts tables from document structure)"),
-    semantic_refinement: bool = Form(False, description="Apply LlamaIndex semantic chunking refinement to improve chunk boundaries. Requires embedding_model to be specified.")
+    semantic_refinement: bool = Form(False, description="Apply LlamaIndex semantic chunking refinement to improve chunk boundaries. Requires embedding_model to be specified."),
+    parse_images: bool = Form(False, description="Enable image description for images in PDF (requires VLM model or API key configured via environment variables)")
 ):
     # Validate file type
     if not file.content_type or not file.content_type.startswith('application/pdf'):
@@ -80,8 +101,22 @@ async def parse_pdf_file(
         if optimize_pdf:
             pdf_content, size_info = PDFOptimizer.optimize_pdf(pdf_content)
         
-        # PDF parsing
-        if not docling_parser.is_available():
+        # Select parser based on parse_images flag
+        if parse_images:
+            # Use image description parser
+            image_parser = get_image_parser()
+            if image_parser is None or not image_parser.is_available():
+                logger.warning("⚠️  Image description requested but parser not available, falling back to standard parser")
+                parser = docling_parser
+            else:
+                parser = image_parser
+                logger.info("📸 Using image description parser")
+        else:
+            # Use standard parser
+            parser = docling_parser
+        
+        # PDF parsing availability check
+        if not parser.is_available():
             raise HTTPException(
                 status_code=503, 
                 detail="Docling parser is not available. Please check dependencies."
@@ -90,7 +125,7 @@ async def parse_pdf_file(
         # Branch: Chunking vs Standard Markdown
         if enable_chunking:
             # Parse to DoclingDocument object
-            document = docling_parser.parse_pdf_to_document(pdf_content)
+            document = parser.parse_pdf_to_document(pdf_content)
             
             # Load tokenizer if embedding model is specified
             tokenizer = None
@@ -138,7 +173,7 @@ async def parse_pdf_file(
             )
         else:
             # Standard markdown parsing
-            parse_result = docling_parser.parse_pdf(pdf_content)
+            parse_result = parser.parse_pdf(pdf_content)
             
             if not parse_result["success"]:
                 raise HTTPException(
@@ -179,7 +214,8 @@ async def root():
             "Batched processing with ThreadedPdfPipelineOptions",
             "ENV-based configuration (modify Dockerfile and rebuild)",
             "Multi-threaded processing (optimized for 2x 72-core Xeon 6960P)",
-            "Structured markdown or semantic chunks output"
+            "Structured markdown or semantic chunks output",
+            "Image description support (optional, via parse_images parameter)"
         ],
         "version": "2.4.0",
         "endpoints": {

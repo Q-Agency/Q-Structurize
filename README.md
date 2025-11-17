@@ -11,6 +11,7 @@ Advanced PDF parsing and structured text extraction API using Docling's Standard
 - **🔄 Structured Output**: Clean markdown format or semantic chunks with rich metadata
 - **🧩 Hybrid Chunking**: Modern chunking with native merge_peers for RAG and semantic search
 - **🎯 Custom Tokenizers**: Match any HuggingFace embedding model's tokenizer for accurate chunking
+- **📸 Image Description**: Optional AI-powered image description using VLM models (SmolVLM, Granite Vision) or API-based models (GPT-4 Vision)
 - **⚡ Multi-threaded**: Optimized for high-performance CPUs (72-core Xeon 6960P)
 - **⚙️ Configurable Pipeline**: Per-request configuration of OCR, table extraction, threading, and more
 - **🐳 Docker Support**: Ready for containerized deployment
@@ -75,6 +76,7 @@ Parse PDF files using Docling's StandardPdfPipeline with configurable options. S
 - `embedding_model` (optional, string): HuggingFace embedding model name to use its tokenizer for accurate chunking (e.g., 'nomic-ai/nomic-embed-text-v1.5'). **Only loads the tokenizer (~2MB), not the full model**. Match this to your actual embedding model to ensure chunks fit perfectly. If not specified, uses HybridChunker's built-in tokenizer
 - `include_markdown` (optional, boolean): Include full markdown when chunking enabled (default: false)
 - `native_serialize` (optional, boolean): Use native Docling serialization via model_dump() (default: false)
+- `parse_images` (optional, boolean): Enable image description for images in PDF (default: false). Requires VLM model or API key configured via environment variables
 - `pipeline_options` (optional, JSON string): Pipeline configuration options
   - `enable_ocr` (boolean): Enable OCR for scanned documents (default: false)
   - `ocr_languages` (array): Language codes like ["en", "es"] (default: ["en"])
@@ -287,6 +289,26 @@ curl -X POST "http://localhost:8878/parse/file" \
 curl -X POST "http://localhost:8878/parse/file" \
   -F "file=@multilingual.pdf" \
   -F 'pipeline_options={"enable_ocr": true, "ocr_languages": ["en", "es", "de"], "num_threads": 16}'
+```
+
+### Parse PDF with Image Descriptions (Local VLM Model)
+```bash
+# Uses SmolVLM model (default) - requires model download on first use
+curl -X POST "http://localhost:8878/parse/file" \
+  -F "file=@document_with_images.pdf" \
+  -F "parse_images=true"
+```
+
+### Parse PDF with Image Descriptions (GPT-4 Vision API)
+```bash
+# Requires environment variables:
+# DOCLING_PICTURE_DESCRIPTION_MODEL=api
+# DOCLING_PICTURE_DESCRIPTION_API_URL=https://api.openai.com/v1/chat/completions
+# DOCLING_PICTURE_DESCRIPTION_API_KEY=your-openai-api-key
+# DOCLING_PICTURE_DESCRIPTION_API_MODEL=gpt-4o
+curl -X POST "http://localhost:8878/parse/file" \
+  -F "file=@document_with_images.pdf" \
+  -F "parse_images=true"
 ```
 
 ### Get Available Configuration Options
@@ -783,11 +805,82 @@ docker system prune -a
 docker-compose build --no-cache
 ```
 
+## Image Description Feature
+
+### Overview
+
+The image description feature uses Vision-Language Models (VLM) to automatically generate descriptions for images found in PDFs. This is an **optional feature** that must be explicitly enabled via the `parse_images=true` parameter.
+
+### Supported Models
+
+1. **Local VLM Models** (run on your server):
+   - **SmolVLM** (default): Small, fast model (~256M parameters). Good for basic image descriptions.
+   - **Granite Vision**: Larger, more accurate model (~2B parameters). Better for complex images.
+
+2. **API-based Models** (remote API calls):
+   - **GPT-4 Vision** (OpenAI): High-quality descriptions via OpenAI API. Requires API key.
+   - **Other OpenAI-compatible APIs**: vLLM, LM Studio, Ollama, etc.
+
+### Configuration
+
+Image description is configured via environment variables:
+
+**For Local Models:**
+```bash
+DOCLING_PICTURE_DESCRIPTION_MODEL=smolvlm  # or 'granite'
+DOCLING_PICTURE_DESCRIPTION_PROMPT=""  # Optional custom prompt
+```
+
+**For API-based Models (GPT-4 Vision):**
+```bash
+DOCLING_PICTURE_DESCRIPTION_MODEL=api
+DOCLING_PICTURE_DESCRIPTION_API_URL=https://api.openai.com/v1/chat/completions
+DOCLING_PICTURE_DESCRIPTION_API_KEY=your-openai-api-key
+DOCLING_PICTURE_DESCRIPTION_API_MODEL=gpt-4o  # or gpt-4-vision-preview
+DOCLING_PICTURE_DESCRIPTION_API_TIMEOUT=90
+```
+
+### Usage
+
+**Enable image descriptions:**
+```bash
+curl -X POST "http://localhost:8878/parse/file" \
+  -F "file=@document.pdf" \
+  -F "parse_images=true"
+```
+
+**Image descriptions appear in markdown output:**
+- Images are automatically detected in PDFs
+- Each image is processed by the selected VLM model
+- Descriptions are added as alt text or captions in the exported markdown
+- Descriptions are included in chunked output when `enable_chunking=true`
+
+### Model Selection
+
+| Model | Type | Size | Speed | Quality | Requirements |
+|-------|------|------|-------|---------|--------------|
+| SmolVLM | Local | ~256M | Fast | Good | Model download (~500MB) |
+| Granite Vision | Local | ~2B | Medium | Better | Model download (~4GB) |
+| GPT-4 Vision | API | N/A | Medium | Best | API key, network access |
+
+### Performance Considerations
+
+- **Local models**: First request slower (model download/loading), subsequent requests faster
+- **API models**: Network latency added per image, but no local model storage needed
+- **Processing time**: Adds ~1-5 seconds per image depending on model and image complexity
+- **Cost**: API-based models incur API costs per image processed
+
+### Privacy & Security
+
+- **Local models**: All processing happens on your server, no data leaves your infrastructure
+- **API models**: Images are sent to the API provider (e.g., OpenAI). Review privacy policies before use.
+
 ## Limitations
 
-1. **No Vision-Language Understanding**
-   - StandardPdfPipeline uses traditional CV models, not VLM
-   - For advanced visual understanding, consider upgrading to VLM pipeline
+1. **Image Description is Optional**
+   - Must be explicitly enabled via `parse_images=true` parameter
+   - Requires VLM model configuration or API key
+   - Not enabled by default to avoid unnecessary processing
 
 2. **OCR Accuracy**
    - Depends on scan quality

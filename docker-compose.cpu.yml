@@ -25,6 +25,11 @@ services:
       - DOCLING_ACCELERATOR_DEVICE=cpu
       # Force CPU-only
       - CUDA_VISIBLE_DEVICES=""
+      # Image description configuration (optional)
+      # - DOCLING_PICTURE_DESCRIPTION_MODEL=smolvlm  # Options: smolvlm, granite, api
+      # - DOCLING_PICTURE_DESCRIPTION_API_URL=https://api.openai.com/v1/chat/completions  # For API-based models
+      # - DOCLING_PICTURE_DESCRIPTION_API_KEY=your-api-key-here  # Set via secrets
+      # - DOCLING_PICTURE_DESCRIPTION_API_MODEL=gpt-4o  # For OpenAI GPT-4 Vision
 
     restart: unless-stopped
 

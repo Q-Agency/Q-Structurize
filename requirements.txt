@@ -9,3 +9,6 @@ llama-index-core>=0.10.0
 llama-index-embeddings-huggingface>=0.1.0
 # Required for some embedding models like nomic-embed-text-v1.5
 einops>=0.7.0
+# Optional: VLM dependencies for local image description models (only needed if using local VLM models)
+# Uncomment if using local models (SmolVLM, Granite Vision) instead of API-based models (GPT-4 Vision)
+# qwen-vl-utils>=0.0.11  # Required for some VLM models
