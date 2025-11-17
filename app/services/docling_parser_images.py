@@ -53,6 +53,7 @@ try:
     from docling.pipeline.threaded_standard_pdf_pipeline import ThreadedStandardPdfPipeline
     from docling.utils.model_downloader import download_models
     from pydantic import AnyUrl
+    from docling_core.types.doc import PictureItem
     
     settings.perf.page_batch_size = int(os.environ.get('DOCLING_PAGE_BATCH_SIZE', '12'))
     DOCLING_AVAILABLE = True
@@ -72,6 +73,7 @@ except ImportError as e:
     AcceleratorDevice = None
     download_models = None
     AnyUrl = None
+    PictureItem = None
     logger.error(f"Failed to import docling: {e}")
 
 
@@ -315,6 +317,83 @@ class DoclingParserImages:
         
         return pipeline_options
     
+    def _log_image_descriptions(self, document):
+        """
+        Log information about images and their descriptions in the document.
+        
+        Args:
+            document: DoclingDocument object
+        """
+        if not DOCLING_AVAILABLE or PictureItem is None:
+            return
+        
+        try:
+            picture_count = 0
+            described_count = 0
+            descriptions = []
+            
+            # Iterate through all items in the document
+            for element, _level in document.iterate_items():
+                if isinstance(element, PictureItem):
+                    picture_count += 1
+                    
+                    # Get description/caption if available
+                    caption = None
+                    try:
+                        if hasattr(element, 'caption_text'):
+                            caption = element.caption_text(doc=document)
+                    except Exception:
+                        pass
+                    
+                    annotations = getattr(element, 'annotations', [])
+                    
+                    # Check if image has description
+                    has_description = bool(caption or annotations)
+                    if has_description:
+                        described_count += 1
+                    
+                    # Get image reference/ID
+                    image_ref = getattr(element, 'self_ref', f'image_{picture_count}')
+                    
+                    # Get page number if available
+                    page_num = None
+                    try:
+                        if hasattr(element, 'page'):
+                            page_num = element.page
+                        elif hasattr(element, 'meta') and hasattr(element.meta, 'page'):
+                            page_num = element.meta.page
+                    except Exception:
+                        pass
+                    
+                    # Log individual image info
+                    if has_description:
+                        desc_text = caption if caption else (annotations[0] if annotations else "Description available")
+                        # Truncate long descriptions for logging
+                        desc_preview = desc_text[:150] + "..." if len(desc_text) > 150 else desc_text
+                        page_info = f" (page {page_num})" if page_num is not None else ""
+                        logger.info(f"📸 Image {picture_count} ({image_ref}){page_info}: {desc_preview}")
+                        descriptions.append({
+                            'ref': str(image_ref),
+                            'description': desc_text,
+                            'page': page_num
+                        })
+                    else:
+                        page_info = f" (page {page_num})" if page_num is not None else ""
+                        logger.debug(f"📸 Image {picture_count} ({image_ref}){page_info}: No description available")
+            
+            # Log summary
+            if picture_count > 0:
+                logger.info(f"📊 Image description summary: {described_count}/{picture_count} images described")
+                if described_count > 0:
+                    logger.info(f"✅ Successfully described {described_count} image(s)")
+                if described_count < picture_count:
+                    logger.warning(f"⚠️  {picture_count - described_count} image(s) without descriptions")
+            else:
+                logger.info("📊 No images found in document")
+                
+        except Exception as e:
+            logger.warning(f"⚠️  Could not log image descriptions: {str(e)}")
+    
     def parse_pdf(self, pdf_content: bytes) -> Dict[str, Any]:
         """
         Parse PDF content with image descriptions enabled.
@@ -359,6 +438,10 @@ class DoclingParserImages:
             # Extract content - export to markdown
             export_start = time.time()
             document = result.document
+            
+            # Log image descriptions
+            self._log_image_descriptions(document)
+            
             markdown_content = document.export_to_markdown()
             export_time = time.time() - export_start
             
@@ -423,10 +506,14 @@ class DoclingParserImages:
             result = self.converter.convert(source=doc_stream)
             conversion_time = time.time() - conversion_start
             
+            # Log image descriptions
+            document = result.document
+            self._log_image_descriptions(document)
+            
             total_time = time.time() - parse_start
             logger.info(f"✅ Document parsed with image descriptions in {total_time:.2f}s (conversion: {conversion_time:.2f}s)")
             
-            return result.document
+            return document
                 
         except Exception as e:
             logger.error(f"❌ Error parsing PDF to document with image descriptions: {str(e)}", exc_info=True)
