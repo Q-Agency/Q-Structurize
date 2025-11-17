@@ -10,10 +10,10 @@ Pre-initializes the converter once for optimal performance.
 # from environment variables.
 # ============================================================================
 import os
-import tempfile
 import logging
 import time
 import sys
+from io import BytesIO
 from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ except Exception as e:
 
 # Try to import docling
 try:
-    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.base_models import InputFormat, DocumentStream
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.pipeline.standard_pdf_pipeline import StandardPdfPipeline
     from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions, TableFormerMode
@@ -68,6 +68,7 @@ except ImportError as e:
     DOCLING_AVAILABLE = False
     settings = None
     InputFormat = None
+    DocumentStream = None
     DocumentConverter = None
     PdfFormatOption = None
     StandardPdfPipeline = None
@@ -219,6 +220,7 @@ class DoclingParser:
         """
         Parse PDF content using the pre-initialized converter.
         
+        Uses DocumentStream to avoid temporary file overhead.
         Configuration is set at container startup. To change settings, update 
         Dockerfile ENV variables and rebuild (takes ~10 seconds with cache).
         """
@@ -230,50 +232,39 @@ class DoclingParser:
             }
         
         try:
-            # Create temporary file for PDF content
-            file_write_start = time.time()
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-                tmp_file.write(pdf_content)
-                tmp_file.flush()
-                file_write_time = time.time() - file_write_start
-                
-                # Parse the PDF using pre-initialized converter
-                logger.info(f"📄 Processing PDF ({len(pdf_content):,} bytes)")
-                processing_start = time.time()
-                
-                # CRITICAL: Reuse the pre-initialized converter
-                result = self.converter.convert(source=tmp_file.name)
-                conversion_time = time.time() - processing_start
-                
-                # Extract content - export to markdown
-                export_start = time.time()
-                document = result.document
-                markdown_content = document.export_to_markdown()
-                export_time = time.time() - export_start
-                
-                total_time = time.time() - processing_start
-                
-                # Log summary
-                logger.info(f"✅ Parsed in {total_time:.2f}s: {len(markdown_content):,} chars ({len(markdown_content)/total_time:.0f} chars/sec)")
-                
-                # Clean up temporary file
-                try:
-                    os.unlink(tmp_file.name)
-                except Exception:
-                    pass
-                
-                return {
-                    "success": True,
-                    "content": markdown_content,
-                    "error": None,
-                    "processing_time": total_time,
-                    "timings": {
-                        "file_write": file_write_time,
-                        "conversion": conversion_time,
-                        "markdown_export": export_time,
-                        "total": total_time
-                    }
+            # Create DocumentStream from bytes (no temp file needed)
+            processing_start = time.time()
+            doc_stream = DocumentStream(name="document.pdf", stream=BytesIO(pdf_content))
+            
+            # Parse the PDF using pre-initialized converter
+            logger.info(f"📄 Processing PDF ({len(pdf_content):,} bytes)")
+            
+            # CRITICAL: Reuse the pre-initialized converter
+            result = self.converter.convert(source=doc_stream)
+            conversion_time = time.time() - processing_start
+            
+            # Extract content - export to markdown
+            export_start = time.time()
+            document = result.document
+            markdown_content = document.export_to_markdown()
+            export_time = time.time() - export_start
+            
+            total_time = time.time() - processing_start
+            
+            # Log summary
+            logger.info(f"✅ Parsed in {total_time:.2f}s: {len(markdown_content):,} chars ({len(markdown_content)/total_time:.0f} chars/sec)")
+            
+            return {
+                "success": True,
+                "content": markdown_content,
+                "error": None,
+                "processing_time": total_time,
+                "timings": {
+                    "conversion": conversion_time,
+                    "markdown_export": export_time,
+                    "total": total_time
                 }
+            }
                 
         except Exception as e:
             logger.error(f"❌ Error during PDF parsing: {str(e)}", exc_info=True)
@@ -287,6 +278,7 @@ class DoclingParser:
         """
         Parse PDF content and return DoclingDocument object for further processing.
         
+        Uses DocumentStream to avoid temporary file overhead.
         This method is similar to parse_pdf() but returns the DoclingDocument object
         instead of markdown string. This is useful for chunking and other document
         processing workflows that need access to the structured document.
@@ -295,7 +287,7 @@ class DoclingParser:
             pdf_content: PDF file content as bytes
             
         Returns:
-            DoclingDocument object if successful, None otherwise
+            DoclingDocument object if successful
             
         Raises:
             RuntimeError: If Docling is not available or conversion fails
@@ -304,31 +296,22 @@ class DoclingParser:
             raise RuntimeError("Docling is not available")
         
         try:
-            # Create temporary file for PDF content
+            # Create DocumentStream from bytes (no temp file needed)
             parse_start = time.time()
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-                tmp_file.write(pdf_content)
-                tmp_file.flush()
-                tmp_path = tmp_file.name
-                
-                logger.info(f"📄 Parsing PDF to document ({len(pdf_content):,} bytes)")
-                
-                # Convert using pre-initialized converter
-                conversion_start = time.time()
-                result = self.converter.convert(source=tmp_path)
-                conversion_time = time.time() - conversion_start
-                
-                # Clean up temporary file
-                try:
-                    os.unlink(tmp_path)
-                except Exception:
-                    pass
-                
-                total_time = time.time() - parse_start
-                logger.info(f"✅ Document parsed in {total_time:.2f}s (conversion: {conversion_time:.2f}s)")
-                
-                # Return the document object
-                return result.document
+            doc_stream = DocumentStream(name="document.pdf", stream=BytesIO(pdf_content))
+            
+            logger.info(f"📄 Parsing PDF to document ({len(pdf_content):,} bytes)")
+            
+            # Convert using pre-initialized converter
+            conversion_start = time.time()
+            result = self.converter.convert(source=doc_stream)
+            conversion_time = time.time() - conversion_start
+            
+            total_time = time.time() - parse_start
+            logger.info(f"✅ Document parsed in {total_time:.2f}s (conversion: {conversion_time:.2f}s)")
+            
+            # Return the document object
+            return result.document
                 
         except Exception as e:
             logger.error(f"❌ Error parsing PDF to document: {str(e)}", exc_info=True)
