@@ -475,10 +475,9 @@ class DoclingParserImages:
                     
                     # Log individual image info
                     if has_description:
-                        # Truncate long descriptions for logging
-                        desc_preview = desc_text[:150] + "..." if len(desc_text) > 150 else desc_text
+                        # Log full description text (no truncation)
                         page_info = f" (page {page_num})" if page_num is not None else ""
-                        logger.info(f"📸 Image {picture_count} ({image_ref}){page_info}: {desc_preview}")
+                        logger.info(f"📸 Image {picture_count} ({image_ref}){page_info}: {desc_text}")
                         descriptions.append({
                             'ref': str(image_ref),
                             'description': desc_text,
