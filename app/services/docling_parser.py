@@ -154,11 +154,24 @@ class DoclingParser:
             }
         )
         
-        # Pre-initialize the pipeline (loads models into memory)
-        self.converter.initialize_pipeline(InputFormat.PDF)
-        
-        init_time = time.time() - init_start
-        logger.info(f"✅ Converter initialized in {init_time:.2f}s (models cached in memory)")
+        # Try to pre-initialize the pipeline (loads models into memory)
+        # If models aren't available, initialization will happen lazily on first use
+        try:
+            self.converter.initialize_pipeline(InputFormat.PDF)
+            init_time = time.time() - init_start
+            logger.info(f"✅ Converter initialized in {init_time:.2f}s (models cached in memory)")
+        except (FileNotFoundError, OSError) as e:
+            # Models not available yet - will initialize lazily on first use
+            logger.warning(f"⚠️  Models not available at startup: {str(e)}")
+            logger.info("📦 Pipeline will initialize lazily on first PDF conversion (models will be downloaded if needed)")
+            self._pipeline_initialized = False
+        except Exception as e:
+            # Other errors - log but don't fail startup
+            logger.warning(f"⚠️  Pipeline initialization failed: {str(e)}")
+            logger.info("📦 Pipeline will initialize lazily on first PDF conversion")
+            self._pipeline_initialized = False
+        else:
+            self._pipeline_initialized = True
     
     def _create_pipeline_options(self, user_options: Dict[str, Any]) -> ThreadedPdfPipelineOptions:
         """
@@ -231,6 +244,21 @@ class DoclingParser:
                 "content": None
             }
         
+        # Ensure pipeline is initialized (lazy initialization if models weren't ready at startup)
+        if not getattr(self, '_pipeline_initialized', True):
+            try:
+                logger.info("🔄 Initializing pipeline on first use...")
+                self.converter.initialize_pipeline(InputFormat.PDF)
+                self._pipeline_initialized = True
+                logger.info("✅ Pipeline initialized successfully")
+            except Exception as e:
+                logger.error(f"❌ Failed to initialize pipeline: {str(e)}")
+                return {
+                    "success": False,
+                    "error": f"Pipeline initialization failed: {str(e)}",
+                    "content": None
+                }
+        
         try:
             # Create DocumentStream from bytes (no temp file needed)
             processing_start = time.time()
@@ -294,6 +322,17 @@ class DoclingParser:
         """
         if not DOCLING_AVAILABLE or self.converter is None:
             raise RuntimeError("Docling is not available")
+        
+        # Ensure pipeline is initialized (lazy initialization if models weren't ready at startup)
+        if not getattr(self, '_pipeline_initialized', True):
+            try:
+                logger.info("🔄 Initializing pipeline on first use...")
+                self.converter.initialize_pipeline(InputFormat.PDF)
+                self._pipeline_initialized = True
+                logger.info("✅ Pipeline initialized successfully")
+            except Exception as e:
+                logger.error(f"❌ Failed to initialize pipeline: {str(e)}")
+                raise RuntimeError(f"Pipeline initialization failed: {str(e)}") from e
         
         try:
             # Create DocumentStream from bytes (no temp file needed)
