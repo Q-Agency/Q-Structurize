@@ -55,6 +55,7 @@ try:
     from docling.utils.model_downloader import download_models
     from pydantic import AnyUrl
     from docling_core.types.doc import PictureItem
+    from docling_core.types.doc.document import PictureDescriptionData
     
     settings.perf.page_batch_size = int(os.environ.get('DOCLING_PAGE_BATCH_SIZE', '12'))
     DOCLING_AVAILABLE = True
@@ -75,6 +76,7 @@ except ImportError as e:
     download_models = None
     AnyUrl = None
     PictureItem = None
+    PictureDescriptionData = None
     logger.error(f"Failed to import docling: {e}")
 
 
@@ -423,16 +425,20 @@ class DoclingParserImages:
                     except Exception:
                         pass
                     
-                    # Extract text from annotations (may be DescriptionAnnotation objects)
+                    # Extract text from annotations (PictureDescriptionData objects from docling)
                     annotation_texts = []
                     annotations = getattr(element, 'annotations', [])
                     annotation_types = []
                     for ann in annotations:
                         annotation_types.append(type(ann).__name__)
-                        if isinstance(ann, str):
+                        # Check for PictureDescriptionData first (docling's picture description type)
+                        if PictureDescriptionData is not None and isinstance(ann, PictureDescriptionData):
+                            if ann.text and ann.text.strip():
+                                annotation_texts.append(ann.text)
+                        elif isinstance(ann, str):
                             annotation_texts.append(ann)
                         else:
-                            # Try common attributes for DescriptionAnnotation objects
+                            # Fallback: Try common attributes for other annotation types
                             for attr in ['text', 'content', 'description', 'value', 'annotation']:
                                 if hasattr(ann, attr):
                                     text = getattr(ann, attr)
