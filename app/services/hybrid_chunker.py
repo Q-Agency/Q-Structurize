@@ -27,6 +27,7 @@ from docling_core.transforms.chunker import BaseChunk
 from docling_core.types.doc.document import DoclingDocument
 from app.services.table_serializer import serialize_table_from_chunk
 from app.services.semantic_chunker_refiner import refine_chunks as semantic_refine_chunks
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,122 @@ def _process_chunk_text(chunker: HybridChunker, chunk: BaseChunk) -> tuple[str, 
     contextualized_text = chunker.contextualize(chunk)
     prefixed_text = f"search_document: {contextualized_text}"
     return contextualized_text, prefixed_text
+
+
+def _preserve_image_descriptions(chunks: List[Dict[str, Any]], document: DoclingDocument) -> List[Dict[str, Any]]:
+    """
+    Post-process chunks to ensure complete image descriptions are preserved.
+    
+    This function extracts image descriptions from the document and ensures they
+    are complete in chunks, even if they were truncated during chunking.
+    
+    Args:
+        chunks: List of chunk dictionaries
+        document: DoclingDocument containing image descriptions
+        
+    Returns:
+        List of chunks with preserved image descriptions
+    """
+    try:
+        # Import PictureItem only if available
+        try:
+            from docling_core.types.doc import PictureItem
+        except ImportError:
+            # If PictureItem not available, return chunks as-is
+            return chunks
+        
+        # Build a map of image descriptions from the document
+        image_descriptions = {}
+        for element, _level in document.iterate_items():
+            if isinstance(element, PictureItem):
+                image_ref = getattr(element, 'self_ref', None)
+                if image_ref:
+                    # Get description/caption
+                    desc_text = None
+                    try:
+                        if hasattr(element, 'caption_text'):
+                            caption = element.caption_text(doc=document)
+                            if caption:
+                                desc_text = caption
+                    except Exception:
+                        pass
+                    
+                    # Extract from annotations if no caption
+                    if not desc_text:
+                        annotations = getattr(element, 'annotations', [])
+                        for ann in annotations:
+                            if isinstance(ann, str):
+                                desc_text = ann
+                                break
+                            else:
+                                for attr in ['text', 'content', 'description', 'value', 'annotation']:
+                                    if hasattr(ann, attr):
+                                        text = getattr(ann, attr)
+                                        if isinstance(text, str) and text.strip():
+                                            desc_text = text
+                                            break
+                                if desc_text:
+                                    break
+                    
+                    if desc_text:
+                        image_descriptions[str(image_ref)] = desc_text
+        
+        if not image_descriptions:
+            return chunks
+        
+        # Process each chunk to ensure image descriptions are complete
+        for chunk in chunks:
+            chunk_text = chunk.get("text", "")
+            if not chunk_text:
+                continue
+            
+            # For each image description, check if it appears in the chunk
+            for image_ref, full_description in image_descriptions.items():
+                # Check if chunk contains part of this description
+                # Use a longer prefix to avoid false matches (first 100 chars)
+                prefix_len = min(100, len(full_description))
+                description_prefix = full_description[:prefix_len].lower()
+                
+                # Check if the prefix appears in the chunk
+                if description_prefix in chunk_text.lower():
+                    # Check if the full description is present
+                    if full_description.lower() not in chunk_text.lower():
+                        # Description is present but truncated - find where it starts
+                        desc_start_idx = chunk_text.lower().find(description_prefix)
+                        if desc_start_idx >= 0:
+                            # Find where the description ends in the chunk (might be truncated)
+                            # Look for the end of the chunk or a significant mismatch
+                            remaining_in_chunk = chunk_text[desc_start_idx:]
+                            
+                            # Check if what's in the chunk is significantly shorter than the full description
+                            # Use 80% threshold to account for minor differences
+                            if len(remaining_in_chunk) < len(full_description) * 0.8:
+                                # Likely truncated - replace with full description
+                                # Keep text before description
+                                text_before = chunk_text[:desc_start_idx].rstrip()
+                                
+                                # Remove the "search_document:" prefix if present, we'll add it back
+                                if text_before.startswith("search_document:"):
+                                    prefix = "search_document:"
+                                    text_after_prefix = text_before[len(prefix):].strip()
+                                    if text_after_prefix:
+                                        chunk["text"] = f"{prefix} {text_after_prefix}\n\n{full_description}"
+                                    else:
+                                        chunk["text"] = f"{prefix} {full_description}"
+                                else:
+                                    # Append full description
+                                    if text_before:
+                                        chunk["text"] = f"{text_before}\n\n{full_description}"
+                                    else:
+                                        chunk["text"] = full_description
+                                
+                                logger.info(f"🔧 Preserved complete image description for {image_ref} in chunk {chunk.get('chunk_index', '?')} (was {len(remaining_in_chunk)} chars, now {len(full_description)} chars)")
+                                break  # Only process one description per chunk to avoid conflicts
+        
+        return chunks
+    except Exception as e:
+        logger.warning(f"⚠️  Could not preserve image descriptions: {str(e)}")
+        return chunks
 
 
 def _log_chunk_statistics(
@@ -297,6 +414,9 @@ def chunk_document(
         
         if chunk_idx % 10 == 0 and chunk_idx > 0:
             logger.debug(f"Processed {chunk_idx} chunks...")
+    
+    # Preserve complete image descriptions in chunks
+    chunks = _preserve_image_descriptions(chunks, document)
     
     # Log statistics (shared logic)
     _log_chunk_statistics(chunks, start_time, text_field="text", is_native=False)
