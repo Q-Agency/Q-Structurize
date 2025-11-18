@@ -143,7 +143,7 @@ ENV DOCLING_MAX_NUM_PAGES=150 \
 
 # LAYOUT MODEL SELECTION
 # Layout Model: "heron" (default), "heron_101", "egret_medium", "egret_large", "egret_xlarge"
-ENV DOCLING_LAYOUT_MODEL=egret_xlarge
+ENV DOCLING_LAYOUT_MODEL=heron_101
 
 # IMAGE GENERATION OPTIONS
 # Generate Page Images: Enable generation of full page images (increases memory usage)
