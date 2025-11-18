@@ -173,6 +173,9 @@ class DoclingParserImages:
             
             # VLM Integration
             "force_backend_text": os.environ.get('DOCLING_FORCE_BACKEND_TEXT', 'false').lower() == 'true',
+            
+            # Picture Classification (separate from description - adds category labels)
+            "do_picture_classification": os.environ.get('DOCLING_DO_PICTURE_CLASSIFICATION', 'false').lower() == 'true',
         }
         
         # Override with provided config if any
@@ -299,6 +302,10 @@ class DoclingParserImages:
         
         # VLM integration option
         pipeline_options.force_backend_text = user_options.get("force_backend_text", False)
+        
+        # Picture classification (categorizes images: diagram, photo, chart, etc.)
+        # This is separate from picture description - classification adds category labels
+        pipeline_options.do_picture_classification = user_options.get("do_picture_classification", False)
         
         # ============================================================================
         # IMAGE DESCRIPTION CONFIGURATION
