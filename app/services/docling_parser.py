@@ -57,7 +57,7 @@ except Exception as e:
 
 # Try to import docling
 try:
-    from docling.datamodel.base_models import InputFormat, DocumentStream
+    from docling.datamodel.base_models import InputFormat, DocumentStream, ConversionStatus
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.pipeline.standard_pdf_pipeline import StandardPdfPipeline
     from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions, TableFormerMode
@@ -65,7 +65,19 @@ try:
     from docling.datamodel.settings import settings
     from docling.pipeline.threaded_standard_pdf_pipeline import ThreadedStandardPdfPipeline
     from docling.utils.model_downloader import download_models
-    settings.perf.page_batch_size = int(os.environ.get('DOCLING_PAGE_BATCH_SIZE', '12'))
+    from docling.datamodel.layout_model_specs import (
+        DOCLING_LAYOUT_HERON,
+        DOCLING_LAYOUT_HERON_101,
+        DOCLING_LAYOUT_EGRET_MEDIUM,
+        DOCLING_LAYOUT_EGRET_LARGE,
+        DOCLING_LAYOUT_EGRET_XLARGE,
+    )
+    # Configure global performance settings
+    if settings:
+        settings.perf.page_batch_size = int(os.environ.get('DOCLING_PAGE_BATCH_SIZE', '12'))
+        settings.perf.doc_batch_size = int(os.environ.get('DOCLING_DOC_BATCH_SIZE', '1'))
+        settings.perf.doc_batch_concurrency = int(os.environ.get('DOCLING_DOC_BATCH_CONCURRENCY', '1'))
+        settings.perf.elements_batch_size = int(os.environ.get('DOCLING_ELEMENTS_BATCH_SIZE', '16'))
     DOCLING_AVAILABLE = True
 except ImportError as e:
     DOCLING_AVAILABLE = False
@@ -79,6 +91,12 @@ except ImportError as e:
     AcceleratorOptions = None
     AcceleratorDevice = None
     download_models = None
+    ConversionStatus = None
+    DOCLING_LAYOUT_HERON = None
+    DOCLING_LAYOUT_HERON_101 = None
+    DOCLING_LAYOUT_EGRET_MEDIUM = None
+    DOCLING_LAYOUT_EGRET_LARGE = None
+    DOCLING_LAYOUT_EGRET_XLARGE = None
     logger.error(f"Failed to import docling: {e}")
 
 
@@ -130,13 +148,35 @@ class DoclingParser:
             "layout_batch_size": int(os.environ.get('DOCLING_LAYOUT_BATCH_SIZE', '32')),
             "ocr_batch_size": int(os.environ.get('DOCLING_OCR_BATCH_SIZE', '32')),
             "table_batch_size": int(os.environ.get('DOCLING_TABLE_BATCH_SIZE', '32')),
-            "queue_max_size": int(os.environ.get('DOCLING_QUEUE_MAX_SIZE', '1000'))
+            "queue_max_size": int(os.environ.get('DOCLING_QUEUE_MAX_SIZE', '1000')),
+            "batch_polling_interval_seconds": float(os.environ.get('DOCLING_BATCH_POLLING_INTERVAL', '0.5')),
+            
+            # Document Safety Limits
+            "max_num_pages": int(os.environ.get('DOCLING_MAX_NUM_PAGES', '1000')),
+            "max_file_size": int(os.environ.get('DOCLING_MAX_FILE_SIZE', '104857600')),  # 100MB default
+            "page_range": os.environ.get('DOCLING_PAGE_RANGE', ''),  # Format: "1-100" or empty for all
+            "document_timeout": float(os.environ.get('DOCLING_DOCUMENT_TIMEOUT', '300')),  # 5 minutes default
+            
+            # Layout Model Selection
+            "layout_model": os.environ.get('DOCLING_LAYOUT_MODEL', 'heron').lower(),
+            
+            # Image Generation Options
+            "generate_page_images": os.environ.get('DOCLING_GENERATE_PAGE_IMAGES', 'false').lower() == 'true',
+            "generate_picture_images": os.environ.get('DOCLING_GENERATE_PICTURE_IMAGES', 'false').lower() == 'true',
+            "images_scale": float(os.environ.get('DOCLING_IMAGES_SCALE', '1.0')),
+            
+            # VLM Integration
+            "force_backend_text": os.environ.get('DOCLING_FORCE_BACKEND_TEXT', 'false').lower() == 'true',
         }
         
-        # Enable Docling's built-in pipeline profiling for detailed timing
+        # Enable Docling's built-in pipeline profiling for detailed timing (configurable)
         if settings:
-            settings.debug.profile_pipeline_timings = True
-            logger.debug("🔍 Docling pipeline profiling enabled")
+            enable_profiling = os.environ.get('DOCLING_ENABLE_PROFILING', 'false').lower() == 'true'
+            settings.debug.profile_pipeline_timings = enable_profiling
+            if enable_profiling:
+                logger.debug("🔍 Docling pipeline profiling enabled")
+            else:
+                logger.debug("🔍 Docling pipeline profiling disabled (set DOCLING_ENABLE_PROFILING=true to enable)")
         
         # Create pipeline options with default configuration
         pipeline_options = self._create_pipeline_options(self.default_config)
@@ -236,6 +276,31 @@ class DoclingParser:
         pipeline_options.ocr_batch_size = user_options.get("ocr_batch_size", 32)
         pipeline_options.table_batch_size = user_options.get("table_batch_size", 32)
         pipeline_options.queue_max_size = user_options.get("queue_max_size", 1000)
+        pipeline_options.batch_polling_interval_seconds = user_options.get("batch_polling_interval_seconds", 0.5)
+        
+        # Document timeout protection
+        pipeline_options.document_timeout = user_options.get("document_timeout", 300)
+        
+        # Layout model selection
+        layout_model = user_options.get("layout_model", "heron").lower()
+        if DOCLING_AVAILABLE and DOCLING_LAYOUT_HERON:
+            if layout_model == "heron_101":
+                pipeline_options.layout_options.model_spec = DOCLING_LAYOUT_HERON_101
+            elif layout_model == "egret_medium":
+                pipeline_options.layout_options.model_spec = DOCLING_LAYOUT_EGRET_MEDIUM
+            elif layout_model == "egret_large":
+                pipeline_options.layout_options.model_spec = DOCLING_LAYOUT_EGRET_LARGE
+            elif layout_model == "egret_xlarge":
+                pipeline_options.layout_options.model_spec = DOCLING_LAYOUT_EGRET_XLARGE
+            # Default is already DOCLING_LAYOUT_HERON
+        
+        # Image generation options
+        pipeline_options.generate_page_images = user_options.get("generate_page_images", False)
+        pipeline_options.generate_picture_images = user_options.get("generate_picture_images", False)
+        pipeline_options.images_scale = float(user_options.get("images_scale", 1.0))
+        
+        # VLM integration option
+        pipeline_options.force_backend_text = user_options.get("force_backend_text", False)
         
         return pipeline_options
     
@@ -312,25 +377,69 @@ class DoclingParser:
             # Parse the PDF using pre-initialized converter
             logger.info(f"📄 Processing PDF ({len(pdf_content):,} bytes)")
             
-            # CRITICAL: Reuse the pre-initialized converter
-            result = self.converter.convert(source=doc_stream)
+            # Parse page range if specified (format: "1-100" or empty for all)
+            page_range = None
+            page_range_str = self.default_config.get("page_range", "")
+            if page_range_str:
+                try:
+                    parts = page_range_str.split("-")
+                    if len(parts) == 2:
+                        start = int(parts[0].strip())
+                        end = int(parts[1].strip())
+                        page_range = (start, end)
+                        logger.info(f"📄 Processing pages {start}-{end}")
+                except (ValueError, IndexError):
+                    logger.warning(f"⚠️  Invalid page_range format '{page_range_str}', processing all pages")
+            
+            # CRITICAL: Reuse the pre-initialized converter with safety limits
+            result = self.converter.convert(
+                source=doc_stream,
+                max_num_pages=self.default_config.get("max_num_pages", 1000),
+                max_file_size=self.default_config.get("max_file_size", 104857600),
+                page_range=page_range if page_range else (1, sys.maxsize)
+            )
             conversion_time = time.time() - processing_start
             
-            # Extract content - export to markdown
+            # Check conversion status and handle warnings/errors
+            status = result.status
+            warnings = []
+            errors = []
+            
+            if hasattr(result, 'errors') and result.errors:
+                for error_item in result.errors:
+                    error_msg = f"{error_item.component_type}: {error_item.error_message}"
+                    if status == ConversionStatus.PARTIAL_SUCCESS:
+                        warnings.append(error_msg)
+                        logger.warning(f"⚠️  Conversion warning: {error_msg}")
+                    else:
+                        errors.append(error_msg)
+                        logger.error(f"❌ Conversion error: {error_msg}")
+            
+            # Extract content - export to markdown only if successful or partially successful
             export_start = time.time()
-            document = result.document
-            markdown_content = document.export_to_markdown()
+            markdown_content = None
+            if status in (ConversionStatus.SUCCESS, ConversionStatus.PARTIAL_SUCCESS):
+                document = result.document
+                markdown_content = document.export_to_markdown()
             export_time = time.time() - export_start
             
             total_time = time.time() - processing_start
             
-            # Log summary
-            logger.info(f"✅ Parsed in {total_time:.2f}s: {len(markdown_content):,} chars ({len(markdown_content)/total_time:.0f} chars/sec)")
+            # Log summary with status
+            if status == ConversionStatus.SUCCESS:
+                logger.info(f"✅ Parsed in {total_time:.2f}s: {len(markdown_content):,} chars ({len(markdown_content)/total_time:.0f} chars/sec)")
+            elif status == ConversionStatus.PARTIAL_SUCCESS:
+                logger.warning(f"⚠️  Partially parsed in {total_time:.2f}s: {len(markdown_content):,} chars (warnings: {len(warnings)})")
+            else:
+                logger.error(f"❌ Conversion failed in {total_time:.2f}s")
             
             return {
-                "success": True,
+                "success": status == ConversionStatus.SUCCESS,
+                "status": status.value if status else "unknown",
                 "content": markdown_content,
-                "error": None,
+                "error": errors[0] if errors else None,
+                "warnings": warnings,
+                "errors": errors,
                 "processing_time": total_time,
                 "timings": {
                     "conversion": conversion_time,
@@ -417,12 +526,49 @@ class DoclingParser:
             
             logger.info(f"📄 Parsing PDF to document ({len(pdf_content):,} bytes)")
             
-            # Convert using pre-initialized converter
+            # Parse page range if specified (format: "1-100" or empty for all)
+            page_range = None
+            page_range_str = self.default_config.get("page_range", "")
+            if page_range_str:
+                try:
+                    parts = page_range_str.split("-")
+                    if len(parts) == 2:
+                        start = int(parts[0].strip())
+                        end = int(parts[1].strip())
+                        page_range = (start, end)
+                        logger.info(f"📄 Processing pages {start}-{end}")
+                except (ValueError, IndexError):
+                    logger.warning(f"⚠️  Invalid page_range format '{page_range_str}', processing all pages")
+            
+            # Convert using pre-initialized converter with safety limits
             conversion_start = time.time()
-            result = self.converter.convert(source=doc_stream)
+            result = self.converter.convert(
+                source=doc_stream,
+                max_num_pages=self.default_config.get("max_num_pages", 1000),
+                max_file_size=self.default_config.get("max_file_size", 104857600),
+                page_range=page_range if page_range else (1, sys.maxsize)
+            )
             conversion_time = time.time() - conversion_start
             
             total_time = time.time() - parse_start
+            
+            # Check conversion status and handle errors
+            status = result.status
+            if status == ConversionStatus.FAILURE:
+                error_msgs = []
+                if hasattr(result, 'errors') and result.errors:
+                    error_msgs = [f"{e.component_type}: {e.error_message}" for e in result.errors]
+                error_msg = "; ".join(error_msgs) if error_msgs else "Conversion failed"
+                logger.error(f"❌ Document conversion failed: {error_msg}")
+                raise RuntimeError(f"Failed to parse PDF: {error_msg}")
+            elif status == ConversionStatus.PARTIAL_SUCCESS:
+                warnings = []
+                if hasattr(result, 'errors') and result.errors:
+                    warnings = [f"{e.component_type}: {e.error_message}" for e in result.errors]
+                logger.warning(f"⚠️  Document partially parsed (warnings: {len(warnings)})")
+                for warning in warnings:
+                    logger.warning(f"⚠️  {warning}")
+            
             logger.info(f"✅ Document parsed in {total_time:.2f}s (conversion: {conversion_time:.2f}s)")
             
             # Return the document object

@@ -139,10 +139,6 @@ class ChunkMetadata(BaseModel):
         default=None,
         description="Whether this chunk contains table structure"
     )
-    provenance: Optional[List[str]] = Field(
-        default=None,
-        description="Provenance labels for image descriptions in this chunk (e.g., model names or API sources)"
-    )
     doc_items_count: Optional[int] = Field(
         default=None,
         description="Number of document items in this chunk"
@@ -154,7 +150,6 @@ class ChunkMetadata(BaseModel):
                 "content_type": "text",
                 "heading_path": "Chapter 1 > Introduction",
                 "pages": [1, 2],
-                "provenance": ["api-gpt-4o", "granite-vision"],
                 "doc_items_count": 5
             }
         }
