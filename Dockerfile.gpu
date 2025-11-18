@@ -52,15 +52,22 @@ RUN ls -lah /root/.cache/docling/models || true
 # 
 # PyTorch/CUDA settings
 ENV TOKENIZERS_PARALLELISM=false \
-    CUDA_VISIBLE_DEVICES=0 \
     PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
+   # GPU Memory Optimization for H200 (141GB HBM3e)
+ENV CUDA_VISIBLE_DEVICES=0 \
+    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:512 \
+    CUDA_MODULE_LOADING=LAZY \
+    CUDA_DEVICE_MAX_CONNECTIONS=8 \
+    TF_GPU_THREAD_MODE=gpu_private \
+    TF_GPU_THREAD_COUNT=2 
+
 # Threading configuration for CPU operations
-ENV OMP_NUM_THREADS=64 \
-    MKL_NUM_THREADS=64 \
-    OPENBLAS_NUM_THREADS=64 \
-    NUMEXPR_NUM_THREADS=32 \
-    TORCH_NUM_THREADS=64 \
+ENV OMP_NUM_THREADS=120 \
+    MKL_NUM_THREADS=120 \
+    OPENBLAS_NUM_THREADS=120 \
+    NUMEXPR_NUM_THREADS=60 \
+    TORCH_NUM_THREADS=120 \
     KMP_BLOCKTIME=1 \
     KMP_SETTINGS=1 \
     KMP_AFFINITY="granularity=fine,compact,1,0" \
@@ -97,11 +104,11 @@ ENV DOCLING_ENABLE_OCR=false \
 ENV DOCLING_PICTURE_DESCRIPTION_MODEL=granite \
     DOCLING_PICTURE_DESCRIPTION_PROMPT="Provide a detailed, objective description of the image suitable for embedding generation and accurate semantic retrieval during RFP analysis. Include key visual elements, text, layout, relationships between objects, business-relevant components, and any contextual cues that could help match this image to RFP requirements or use cases. Avoid stylistic language or irrelevant commentary." \
     DOCLING_PICTURE_AREA_THRESHOLD=0.05 \
-    DOCLING_PICTURE_BATCH_SIZE=8 \
+    DOCLING_PICTURE_BATCH_SIZE=4 \
     DOCLING_PICTURE_MAX_NEW_TOKENS=512 \
-    DOCLING_PICTURE_SCALE=2.0 \
+    DOCLING_PICTURE_SCALE=1.5 \
     DOCLING_PICTURE_PROVENANCE="Granite Vision" \
-    DOCLING_PICTURE_CONCURRENCY=8 \
+    DOCLING_PICTURE_CONCURRENCY=4 \
     DOCLING_PICTURE_DESCRIPTION_API_URL=https://api.openai.com/v1/chat/completions \
     DOCLING_PICTURE_DESCRIPTION_API_KEY="" \
     DOCLING_PICTURE_DESCRIPTION_API_MODEL=gpt-4o \
@@ -115,12 +122,12 @@ ENV DOCLING_PICTURE_DESCRIPTION_MODEL=granite \
 # Queue Max Size: Maximum size of internal processing queues (backpressure control)
 # Batch Polling Interval: Seconds between worker thread checks for new work (0.5 = 500ms)
 # Accelerator Device: "cpu", "cuda", "cuda:0", "cuda:1", "mps", or "auto"
-ENV DOCLING_LAYOUT_BATCH_SIZE=64 \
-    DOCLING_OCR_BATCH_SIZE=64 \
-    DOCLING_TABLE_BATCH_SIZE=64 \
-    DOCLING_PAGE_BATCH_SIZE=24 \
-    DOCLING_QUEUE_MAX_SIZE=2000 \
-    DOCLING_BATCH_POLLING_INTERVAL=0.5 \
+ENV DOCLING_LAYOUT_BATCH_SIZE=32 \
+    DOCLING_OCR_BATCH_SIZE=48 \
+    DOCLING_TABLE_BATCH_SIZE=24 \
+    DOCLING_PAGE_BATCH_SIZE=16 \
+    DOCLING_QUEUE_MAX_SIZE=1000 \
+    DOCLING_BATCH_POLLING_INTERVAL=0.3 \
     DOCLING_ACCELERATOR_DEVICE=cuda
 
 # GLOBAL PERFORMANCE SETTINGS
@@ -136,10 +143,10 @@ ENV DOCLING_DOC_BATCH_SIZE=1 \
 # Max File Size: Maximum file size in bytes (104857600 = 100MB)
 # Page Range: Process specific page range, format "start-end" (e.g., "1-100") or empty for all pages
 # Document Timeout: Maximum seconds to process a document before timeout (300 = 5 minutes)
-ENV DOCLING_MAX_NUM_PAGES=150 \
-    DOCLING_MAX_FILE_SIZE=10485760 \
+ENV DOCLING_MAX_NUM_PAGES=250 \
+    DOCLING_MAX_FILE_SIZE=104857600 \
     DOCLING_PAGE_RANGE="" \
-    DOCLING_DOCUMENT_TIMEOUT=300
+    DOCLING_DOCUMENT_TIMEOUT=500
 
 # LAYOUT MODEL SELECTION
 # Layout Model: "heron" (default), "heron_101", "egret_medium", "egret_large", "egret_xlarge"
@@ -149,8 +156,8 @@ ENV DOCLING_LAYOUT_MODEL=heron_101
 # Generate Page Images: Enable generation of full page images (increases memory usage)
 # Generate Picture Images: Enable generation of individual picture images (increases memory usage)
 # Images Scale: Scale factor for generated images (1.0 = original size)
-ENV DOCLING_GENERATE_PAGE_IMAGES=false \
-    DOCLING_GENERATE_PICTURE_IMAGES=false \
+ENV DOCLING_GENERATE_PAGE_IMAGES=true \
+    DOCLING_GENERATE_PICTURE_IMAGES=true \
     DOCLING_IMAGES_SCALE=1.0
 
 # VLM INTEGRATION

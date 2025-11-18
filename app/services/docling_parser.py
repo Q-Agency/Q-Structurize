@@ -133,7 +133,7 @@ class DoclingParser:
             
             # Table Extraction Configuration
             "do_table_structure": os.environ.get('DOCLING_DO_TABLE_STRUCTURE', 'false').lower() == 'true',
-            "table_mode": os.environ.get('DOCLING_TABLE_MODE', 'fast'),
+            "table_mode": os.environ.get('DOCLING_TABLE_MODE', 'accurate'),
             "do_cell_matching": os.environ.get('DOCLING_DO_CELL_MATCHING', 'false').lower() == 'true',
             
             # Enrichment Options

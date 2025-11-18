@@ -149,7 +149,7 @@ class DoclingParserImages:
             "enable_ocr": os.environ.get('DOCLING_ENABLE_OCR', 'false').lower() == 'true',
             "ocr_languages": [lang.strip() for lang in os.environ.get('DOCLING_OCR_LANGUAGES', 'en').split(',')],
             "do_table_structure": os.environ.get('DOCLING_DO_TABLE_STRUCTURE', 'false').lower() == 'true',
-            "table_mode": os.environ.get('DOCLING_TABLE_MODE', 'fast'),
+            "table_mode": os.environ.get('DOCLING_TABLE_MODE', 'accurate'),
             "do_cell_matching": os.environ.get('DOCLING_DO_CELL_MATCHING', 'false').lower() == 'true',
             "num_threads": int(os.environ.get('OMP_NUM_THREADS', '100')),
             "accelerator_device": os.environ.get('DOCLING_ACCELERATOR_DEVICE', 'cpu'),
