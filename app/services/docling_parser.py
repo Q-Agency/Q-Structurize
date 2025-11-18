@@ -16,6 +16,8 @@ import sys
 from io import BytesIO
 from typing import Optional, Dict, Any
 
+from pydantic import ValidationError
+
 logger = logging.getLogger(__name__)
 # Only attach once to avoid duplicate logs on reload
 if not logger.handlers:
@@ -204,17 +206,24 @@ class DoclingParser:
         
         # Accelerator configuration
         device_str = user_options.get("accelerator_device", "cpu")
-        device_map = {
-            "cpu": AcceleratorDevice.CPU,
-            "cuda": AcceleratorDevice.CUDA,
-            "auto": AcceleratorDevice.AUTO
-        }
-        device = device_map.get(device_str, AcceleratorDevice.CPU)
+        num_threads = user_options.get("num_threads", 120)
+        try:
+            accelerator_options = AcceleratorOptions(
+                num_threads=num_threads,
+                device=device_str
+            )
+        except ValidationError as exc:
+            logger.warning(
+                "Invalid accelerator configuration '%s': %s. Falling back to CPU.",
+                device_str,
+                exc,
+            )
+            accelerator_options = AcceleratorOptions(
+                num_threads=num_threads,
+                device=AcceleratorDevice.CPU,
+            )
         
-        pipeline_options.accelerator_options = AcceleratorOptions(
-            num_threads=user_options.get("num_threads", 120),
-            device=device
-        )
+        pipeline_options.accelerator_options = accelerator_options
         
         # Enrichment options
         pipeline_options.do_code_enrichment = user_options.get("do_code_enrichment", False)
