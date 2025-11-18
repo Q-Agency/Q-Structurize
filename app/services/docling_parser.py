@@ -72,6 +72,7 @@ try:
         DOCLING_LAYOUT_EGRET_LARGE,
         DOCLING_LAYOUT_EGRET_XLARGE,
     )
+    from docling.models.layout_model import LayoutModel
     # Configure global performance settings
     if settings:
         settings.perf.page_batch_size = int(os.environ.get('DOCLING_PAGE_BATCH_SIZE', '12'))
@@ -97,6 +98,7 @@ except ImportError as e:
     DOCLING_LAYOUT_EGRET_MEDIUM = None
     DOCLING_LAYOUT_EGRET_LARGE = None
     DOCLING_LAYOUT_EGRET_XLARGE = None
+    LayoutModel = None
     logger.error(f"Failed to import docling: {e}")
 
 
@@ -333,13 +335,36 @@ class DoclingParser:
                     logger.warning(f"⚠️  Models missing: {error_msg}")
                     logger.info("📥 Attempting to download required models...")
                     try:
-                        if download_models is not None:
-                            # Download only the models we need based on configuration
+                        if download_models is not None and LayoutModel is not None:
+                            # Download the specific layout model that was selected
+                            layout_model = self.default_config.get("layout_model", "heron").lower()
+                            layout_model_config = DOCLING_LAYOUT_HERON  # default
+                            if layout_model == "heron_101" and DOCLING_LAYOUT_HERON_101:
+                                layout_model_config = DOCLING_LAYOUT_HERON_101
+                            elif layout_model == "egret_medium" and DOCLING_LAYOUT_EGRET_MEDIUM:
+                                layout_model_config = DOCLING_LAYOUT_EGRET_MEDIUM
+                            elif layout_model == "egret_large" and DOCLING_LAYOUT_EGRET_LARGE:
+                                layout_model_config = DOCLING_LAYOUT_EGRET_LARGE
+                            elif layout_model == "egret_xlarge" and DOCLING_LAYOUT_EGRET_XLARGE:
+                                layout_model_config = DOCLING_LAYOUT_EGRET_XLARGE
+                            
+                            # Download the specific layout model
+                            if settings:
+                                output_dir = settings.cache_dir / "models"
+                                logger.info(f"📥 Downloading layout model: {layout_model_config.name}")
+                                LayoutModel.download_models(
+                                    local_dir=output_dir / layout_model_config.model_repo_folder,
+                                    force=False,
+                                    progress=True,
+                                    layout_model_config=layout_model_config,
+                                )
+                            
+                            # Download other models if needed
                             download_models(
                                 output_dir=None,  # Uses settings.cache_dir / "models"
                                 force=False,
                                 progress=True,
-                                with_layout=True,
+                                with_layout=False,  # Already downloaded above
                                 with_tableformer=self.default_config.get("do_table_structure", False),
                                 with_code_formula=self.default_config.get("do_code_enrichment", False),
                                 with_picture_classifier=self.default_config.get("do_picture_classification", False),
@@ -491,13 +516,36 @@ class DoclingParser:
                     logger.warning(f"⚠️  Models missing: {error_msg}")
                     logger.info("📥 Attempting to download required models...")
                     try:
-                        if download_models is not None:
-                            # Download only the models we need based on configuration
+                        if download_models is not None and LayoutModel is not None:
+                            # Download the specific layout model that was selected
+                            layout_model = self.default_config.get("layout_model", "heron").lower()
+                            layout_model_config = DOCLING_LAYOUT_HERON  # default
+                            if layout_model == "heron_101" and DOCLING_LAYOUT_HERON_101:
+                                layout_model_config = DOCLING_LAYOUT_HERON_101
+                            elif layout_model == "egret_medium" and DOCLING_LAYOUT_EGRET_MEDIUM:
+                                layout_model_config = DOCLING_LAYOUT_EGRET_MEDIUM
+                            elif layout_model == "egret_large" and DOCLING_LAYOUT_EGRET_LARGE:
+                                layout_model_config = DOCLING_LAYOUT_EGRET_LARGE
+                            elif layout_model == "egret_xlarge" and DOCLING_LAYOUT_EGRET_XLARGE:
+                                layout_model_config = DOCLING_LAYOUT_EGRET_XLARGE
+                            
+                            # Download the specific layout model
+                            if settings:
+                                output_dir = settings.cache_dir / "models"
+                                logger.info(f"📥 Downloading layout model: {layout_model_config.name}")
+                                LayoutModel.download_models(
+                                    local_dir=output_dir / layout_model_config.model_repo_folder,
+                                    force=False,
+                                    progress=True,
+                                    layout_model_config=layout_model_config,
+                                )
+                            
+                            # Download other models if needed
                             download_models(
                                 output_dir=None,  # Uses settings.cache_dir / "models"
                                 force=False,
                                 progress=True,
-                                with_layout=True,
+                                with_layout=False,  # Already downloaded above
                                 with_tableformer=self.default_config.get("do_table_structure", False),
                                 with_code_formula=self.default_config.get("do_code_enrichment", False),
                                 with_picture_classifier=self.default_config.get("do_picture_classification", False),

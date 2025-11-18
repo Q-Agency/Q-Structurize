@@ -60,6 +60,7 @@ try:
         DOCLING_LAYOUT_EGRET_LARGE,
         DOCLING_LAYOUT_EGRET_XLARGE,
     )
+    from docling.models.layout_model import LayoutModel
     from pydantic import AnyUrl
     from docling_core.types.doc import PictureItem
     from docling_core.types.doc.document import PictureDescriptionData
@@ -92,6 +93,7 @@ except ImportError as e:
     DOCLING_LAYOUT_EGRET_MEDIUM = None
     DOCLING_LAYOUT_EGRET_LARGE = None
     DOCLING_LAYOUT_EGRET_XLARGE = None
+    LayoutModel = None
     AnyUrl = None
     PictureItem = None
     PictureDescriptionData = None
@@ -699,6 +701,64 @@ class DoclingParserImages:
                 self.converter.initialize_pipeline(InputFormat.PDF)
                 self._pipeline_initialized = True
                 logger.info("✅ Image-enabled pipeline initialized successfully")
+            except (FileNotFoundError, OSError) as e:
+                # Models missing - try to download them
+                error_msg = str(e)
+                if "safetensors" in error_msg.lower() or "model" in error_msg.lower():
+                    logger.warning(f"⚠️  Models missing: {error_msg}")
+                    logger.info("📥 Attempting to download required models...")
+                    try:
+                        if download_models is not None and LayoutModel is not None:
+                            # Download the specific layout model that was selected
+                            layout_model = self.image_config.get("layout_model", "heron").lower()
+                            layout_model_config = DOCLING_LAYOUT_HERON  # default
+                            if layout_model == "heron_101" and DOCLING_LAYOUT_HERON_101:
+                                layout_model_config = DOCLING_LAYOUT_HERON_101
+                            elif layout_model == "egret_medium" and DOCLING_LAYOUT_EGRET_MEDIUM:
+                                layout_model_config = DOCLING_LAYOUT_EGRET_MEDIUM
+                            elif layout_model == "egret_large" and DOCLING_LAYOUT_EGRET_LARGE:
+                                layout_model_config = DOCLING_LAYOUT_EGRET_LARGE
+                            elif layout_model == "egret_xlarge" and DOCLING_LAYOUT_EGRET_XLARGE:
+                                layout_model_config = DOCLING_LAYOUT_EGRET_XLARGE
+                            
+                            # Download the specific layout model
+                            if settings:
+                                output_dir = settings.cache_dir / "models"
+                                logger.info(f"📥 Downloading layout model: {layout_model_config.name}")
+                                LayoutModel.download_models(
+                                    local_dir=output_dir / layout_model_config.model_repo_folder,
+                                    force=False,
+                                    progress=True,
+                                    layout_model_config=layout_model_config,
+                                )
+                            
+                            # Download other models if needed (but not layout, already done)
+                            download_models(
+                                output_dir=None,  # Uses settings.cache_dir / "models"
+                                force=False,
+                                progress=True,
+                                with_layout=False,  # Already downloaded above
+                                with_tableformer=self.image_config.get("do_table_structure", False),
+                                with_code_formula=self.image_config.get("do_code_enrichment", False),
+                                with_picture_classifier=self.image_config.get("do_picture_classification", False),
+                                with_rapidocr=self.image_config.get("enable_ocr", False),
+                                with_easyocr=False,
+                            )
+                            logger.info("✅ Models downloaded, retrying pipeline initialization...")
+                            self.converter.initialize_pipeline(InputFormat.PDF)
+                            self._pipeline_initialized = True
+                            logger.info("✅ Image-enabled pipeline initialized successfully after model download")
+                        else:
+                            raise RuntimeError("Model downloader not available")
+                    except Exception as download_error:
+                        logger.error(f"❌ Failed to download models: {str(download_error)}")
+                        return {
+                            "success": False,
+                            "error": f"Models missing and download failed: {str(download_error)}. Please run 'docling-tools models download' or ensure models are available.",
+                            "content": None
+                        }
+                else:
+                    raise
             except Exception as e:
                 logger.error(f"❌ Failed to initialize image-enabled pipeline: {str(e)}")
                 return {
@@ -827,6 +887,60 @@ class DoclingParserImages:
                 self.converter.initialize_pipeline(InputFormat.PDF)
                 self._pipeline_initialized = True
                 logger.info("✅ Image-enabled pipeline initialized successfully")
+            except (FileNotFoundError, OSError) as e:
+                # Models missing - try to download them
+                error_msg = str(e)
+                if "safetensors" in error_msg.lower() or "model" in error_msg.lower():
+                    logger.warning(f"⚠️  Models missing: {error_msg}")
+                    logger.info("📥 Attempting to download required models...")
+                    try:
+                        if download_models is not None and LayoutModel is not None:
+                            # Download the specific layout model that was selected
+                            layout_model = self.image_config.get("layout_model", "heron").lower()
+                            layout_model_config = DOCLING_LAYOUT_HERON  # default
+                            if layout_model == "heron_101" and DOCLING_LAYOUT_HERON_101:
+                                layout_model_config = DOCLING_LAYOUT_HERON_101
+                            elif layout_model == "egret_medium" and DOCLING_LAYOUT_EGRET_MEDIUM:
+                                layout_model_config = DOCLING_LAYOUT_EGRET_MEDIUM
+                            elif layout_model == "egret_large" and DOCLING_LAYOUT_EGRET_LARGE:
+                                layout_model_config = DOCLING_LAYOUT_EGRET_LARGE
+                            elif layout_model == "egret_xlarge" and DOCLING_LAYOUT_EGRET_XLARGE:
+                                layout_model_config = DOCLING_LAYOUT_EGRET_XLARGE
+                            
+                            # Download the specific layout model
+                            if settings:
+                                output_dir = settings.cache_dir / "models"
+                                logger.info(f"📥 Downloading layout model: {layout_model_config.name}")
+                                LayoutModel.download_models(
+                                    local_dir=output_dir / layout_model_config.model_repo_folder,
+                                    force=False,
+                                    progress=True,
+                                    layout_model_config=layout_model_config,
+                                )
+                            
+                            # Download other models if needed (but not layout, already done)
+                            download_models(
+                                output_dir=None,  # Uses settings.cache_dir / "models"
+                                force=False,
+                                progress=True,
+                                with_layout=False,  # Already downloaded above
+                                with_tableformer=self.image_config.get("do_table_structure", False),
+                                with_code_formula=self.image_config.get("do_code_enrichment", False),
+                                with_picture_classifier=self.image_config.get("do_picture_classification", False),
+                                with_rapidocr=self.image_config.get("enable_ocr", False),
+                                with_easyocr=False,
+                            )
+                            logger.info("✅ Models downloaded, retrying pipeline initialization...")
+                            self.converter.initialize_pipeline(InputFormat.PDF)
+                            self._pipeline_initialized = True
+                            logger.info("✅ Image-enabled pipeline initialized successfully after model download")
+                        else:
+                            raise RuntimeError("Model downloader not available")
+                    except Exception as download_error:
+                        logger.error(f"❌ Failed to download models: {str(download_error)}")
+                        raise RuntimeError(f"Models missing and download failed: {str(download_error)}. Please run 'docling-tools models download' or ensure models are available.") from download_error
+                else:
+                    raise
             except Exception as e:
                 logger.error(f"❌ Failed to initialize image-enabled pipeline: {str(e)}")
                 raise RuntimeError(f"Pipeline initialization failed: {str(e)}") from e
