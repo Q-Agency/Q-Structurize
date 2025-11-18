@@ -159,7 +159,7 @@ ENV DOCLING_FORCE_BACKEND_TEXT=false
 
 # DEBUG & PROFILING
 # Enable Profiling: Enable detailed pipeline timing profiling (adds overhead, set to "true" for debugging)
-ENV DOCLING_ENABLE_PROFILING=false \
+ENV DOCLING_ENABLE_PROFILING=true \
     LOG_LEVEL=DEBUG
 
 # Finally copy app sources (changes here don't invalidate pip layer)
