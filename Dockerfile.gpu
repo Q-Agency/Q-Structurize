@@ -82,7 +82,7 @@ ENV DOCLING_ENABLE_OCR=false \
     DOCLING_DO_CELL_MATCHING=true \
     DOCLING_DO_CODE_ENRICHMENT=false \
     DOCLING_DO_FORMULA_ENRICHMENT=false \
-    DOCLING_DO_PICTURE_CLASSIFICATION=true
+    DOCLING_DO_PICTURE_CLASSIFICATION=false
 
 # PICTURE DESCRIPTION SETTINGS (enabled via parse_images=true API parameter)
 # Picture Description Model: "smolvlm", "granite", "api", or "custom"
