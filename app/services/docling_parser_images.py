@@ -117,6 +117,14 @@ class DoclingParserImages:
             "api_model": os.environ.get('DOCLING_PICTURE_DESCRIPTION_API_MODEL', 'gpt-4o'),
             "api_timeout": float(os.environ.get('DOCLING_PICTURE_DESCRIPTION_API_TIMEOUT', '90')),
             
+            # Picture description advanced settings
+            "picture_area_threshold": float(os.environ.get('DOCLING_PICTURE_AREA_THRESHOLD', '0.05')),  # Min 5% of page area
+            "batch_size": int(os.environ.get('DOCLING_PICTURE_BATCH_SIZE', '8')),  # Images per batch
+            "max_new_tokens": int(os.environ.get('DOCLING_PICTURE_MAX_NEW_TOKENS', '200')),  # Max tokens for VLM
+            "scale": float(os.environ.get('DOCLING_PICTURE_SCALE', '2.0')),  # Image upscaling factor
+            "provenance": os.environ.get('DOCLING_PICTURE_PROVENANCE', '').strip(),  # Custom provenance label
+            "concurrency": int(os.environ.get('DOCLING_PICTURE_CONCURRENCY', '4')),  # Parallel API calls (API mode only)
+            
             # Inherit other settings from base parser config
             "enable_ocr": os.environ.get('DOCLING_ENABLE_OCR', 'false').lower() == 'true',
             "ocr_languages": [lang.strip() for lang in os.environ.get('DOCLING_OCR_LANGUAGES', 'en').split(',')],
@@ -256,20 +264,40 @@ class DoclingParserImages:
                     headers=headers,
                     prompt=custom_prompt if custom_prompt else "Describe this image in a few sentences.",
                     timeout=api_timeout,
+                    picture_area_threshold=user_options.get("picture_area_threshold", 0.05),
+                    batch_size=user_options.get("batch_size", 8),
+                    scale=user_options.get("scale", 2.0),
+                    provenance=user_options.get("provenance", "") or f"api-{api_model}",
+                    concurrency=user_options.get("concurrency", 4),
                 )
                 logger.info(f"✅ Configured API-based image description: {api_model} at {api_url}")
         
         elif model_type == "granite":
             # Granite Vision model
             custom_prompt = user_options.get("prompt", "")
+            generation_config = {
+                "max_new_tokens": user_options.get("max_new_tokens", 200),
+                "do_sample": False
+            }
             if custom_prompt:
                 pipeline_options.picture_description_options = PictureDescriptionVlmOptions(
                     repo_id=granite_picture_description.repo_id,
                     prompt=custom_prompt,
+                    picture_area_threshold=user_options.get("picture_area_threshold", 0.05),
+                    batch_size=user_options.get("batch_size", 8),
+                    scale=user_options.get("scale", 2.0),
+                    generation_config=generation_config,
                 )
                 logger.info(f"✅ Configured Granite Vision model with custom prompt: '{custom_prompt}'")
             else:
-                pipeline_options.picture_description_options = granite_picture_description
+                pipeline_options.picture_description_options = PictureDescriptionVlmOptions(
+                    repo_id=granite_picture_description.repo_id,
+                    prompt=granite_picture_description.prompt,
+                    picture_area_threshold=user_options.get("picture_area_threshold", 0.05),
+                    batch_size=user_options.get("batch_size", 8),
+                    scale=user_options.get("scale", 2.0),
+                    generation_config=generation_config,
+                )
                 logger.info("✅ Configured Granite Vision model with default prompt")
             
             # Download model if needed (will happen lazily on first use)
@@ -288,6 +316,10 @@ class DoclingParserImages:
             # Custom VLM model
             repo_id = user_options.get("custom_repo_id", "")
             custom_prompt = user_options.get("prompt", "Describe this image in a few sentences.")
+            generation_config = {
+                "max_new_tokens": user_options.get("max_new_tokens", 200),
+                "do_sample": False
+            }
             
             if not repo_id:
                 logger.warning("⚠️  Custom repo_id not provided, falling back to SmolVLM")
@@ -296,20 +328,39 @@ class DoclingParserImages:
                 pipeline_options.picture_description_options = PictureDescriptionVlmOptions(
                     repo_id=repo_id,
                     prompt=custom_prompt,
+                    picture_area_threshold=user_options.get("picture_area_threshold", 0.05),
+                    batch_size=user_options.get("batch_size", 8),
+                    scale=user_options.get("scale", 2.0),
+                    generation_config=generation_config,
                 )
                 logger.info(f"✅ Configured custom VLM model: {repo_id}")
         
         else:
             # Default: SmolVLM model
             custom_prompt = user_options.get("prompt", "")
+            generation_config = {
+                "max_new_tokens": user_options.get("max_new_tokens", 200),
+                "do_sample": False
+            }
             if custom_prompt:
                 pipeline_options.picture_description_options = PictureDescriptionVlmOptions(
                     repo_id=smolvlm_picture_description.repo_id,
                     prompt=custom_prompt,
+                    picture_area_threshold=user_options.get("picture_area_threshold", 0.05),
+                    batch_size=user_options.get("batch_size", 8),
+                    scale=user_options.get("scale", 2.0),
+                    generation_config=generation_config,
                 )
                 logger.info(f"✅ Configured SmolVLM model with custom prompt: '{custom_prompt}'")
             else:
-                pipeline_options.picture_description_options = smolvlm_picture_description
+                pipeline_options.picture_description_options = PictureDescriptionVlmOptions(
+                    repo_id=smolvlm_picture_description.repo_id,
+                    prompt=smolvlm_picture_description.prompt,
+                    picture_area_threshold=user_options.get("picture_area_threshold", 0.05),
+                    batch_size=user_options.get("batch_size", 8),
+                    scale=user_options.get("scale", 2.0),
+                    generation_config=generation_config,
+                )
                 logger.info("✅ Configured SmolVLM model with default prompt")
             
             # Download model if needed (will happen lazily on first use)
@@ -479,11 +530,28 @@ class DoclingParserImages:
                     except Exception:
                         pass
                     
+                    # Calculate image size fraction of page (for diagnostics)
+                    area_fraction = None
+                    below_threshold = False
+                    try:
+                        if len(element.prov) > 0:
+                            prov = element.prov[0]
+                            page = document.pages.get(prov.page_no)
+                            if page is not None and page.size is not None:
+                                page_area = page.size.width * page.size.height
+                                if page_area > 0:
+                                    area_fraction = prov.bbox.area() / page_area
+                                    threshold = self.image_config.get("picture_area_threshold", 0.05)
+                                    below_threshold = area_fraction < threshold
+                    except Exception:
+                        pass
+                    
                     # Log individual image info
                     if has_description:
                         # Log full description text (no truncation)
                         page_info = f" (page {page_num})" if page_num is not None else ""
-                        logger.info(f"📸 Image {picture_count} ({image_ref}){page_info}: {desc_text}")
+                        size_info = f" [{area_fraction*100:.1f}% of page]" if area_fraction is not None else ""
+                        logger.info(f"📸 Image {picture_count} ({image_ref}){page_info}{size_info}: {desc_text}")
                         descriptions.append({
                             'ref': str(image_ref),
                             'description': desc_text,
@@ -491,10 +559,16 @@ class DoclingParserImages:
                         })
                     else:
                         page_info = f" (page {page_num})" if page_num is not None else ""
+                        size_info = f" [{area_fraction*100:.1f}% of page]" if area_fraction is not None else ""
                         # Log diagnostic info for images without descriptions
                         has_annotations = len(annotations) > 0
                         annotation_info = f" ({len(annotations)} annotations: {', '.join(annotation_types[:3])})" if has_annotations else " (no annotations)"
-                        logger.info(f"📸 Image {picture_count} ({image_ref}){page_info}: No description available{annotation_info}")
+                        
+                        # Add warning if image is too small
+                        if below_threshold:
+                            logger.warning(f"📸 Image {picture_count} ({image_ref}){page_info}{size_info}: Likely filtered by area threshold (< {self.image_config.get('picture_area_threshold', 0.05)*100:.0f}%){annotation_info}")
+                        else:
+                            logger.info(f"📸 Image {picture_count} ({image_ref}){page_info}{size_info}: No description available{annotation_info}")
                         
                         # Log additional diagnostic info at DEBUG level
                         logger.debug(f"   - Caption available: {caption is not None}")

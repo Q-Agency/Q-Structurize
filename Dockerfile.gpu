@@ -70,10 +70,18 @@ ENV LOG_LEVEL=DEBUG \
     DOCLING_DO_CODE_ENRICHMENT=false \
     DOCLING_DO_FORMULA_ENRICHMENT=false \
     DOCLING_DO_PICTURE_CLASSIFICATION=false \
-    DOCLING_DO_PICTURE_DESCRIPTION=false \
-    DOCLING_PICTURE_DESCRIPTION_MODEL=granite \
+    # Picture description settings (enabled via parse_images=true API parameter)
+    DOCLING_PICTURE_DESCRIPTION_MODEL=api \
     DOCLING_PICTURE_DESCRIPTION_PROMPT="Provide a detailed, objective description of the image suitable for embedding generation and accurate semantic retrieval during RFP analysis. Include key visual elements, text, layout, relationships between objects, business-relevant components, and any contextual cues that could help match this image to RFP requirements or use cases. Avoid stylistic language or irrelevant commentary." \
-    DOCLING_PICTURE_DESCRIPTION_API_URL="" \
+    # Picture description advanced settings
+    DOCLING_PICTURE_AREA_THRESHOLD=0.05 \
+    DOCLING_PICTURE_BATCH_SIZE=8 \
+    DOCLING_PICTURE_MAX_NEW_TOKENS=512 \
+    DOCLING_PICTURE_SCALE=2.0 \
+    DOCLING_PICTURE_PROVENANCE="" \
+    DOCLING_PICTURE_CONCURRENCY=8 \
+    # API-based picture description (alternative to local VLM models)
+    DOCLING_PICTURE_DESCRIPTION_API_URL=https://api.openai.com/v1/chat/completions \
     DOCLING_PICTURE_DESCRIPTION_API_KEY="" \
     DOCLING_PICTURE_DESCRIPTION_API_MODEL=gpt-4o \
     DOCLING_PICTURE_DESCRIPTION_API_TIMEOUT=90 \
