@@ -28,6 +28,12 @@ from docling_core.types.doc.document import DoclingDocument
 from app.services.table_serializer import serialize_table_from_chunk
 from app.services.semantic_chunker_refiner import refine_chunks as semantic_refine_chunks
 
+# Try to import PictureDescriptionData for provenance extraction
+try:
+    from docling_core.types.doc.document import PictureDescriptionData
+except ImportError:
+    PictureDescriptionData = None
+
 logger = logging.getLogger(__name__)
 
 # Export public API
@@ -162,6 +168,24 @@ def extract_chunk_metadata(chunk: BaseChunk) -> Dict[str, Any]:
     if content_type == "table":
         # Could extract detailed table structure here if needed
         metadata["has_table_structure"] = True
+    
+    # Extract provenance from picture annotations
+    provenance_values: Set[str] = set()
+    if hasattr(chunk.meta, "doc_items") and chunk.meta.doc_items:
+        for item in chunk.meta.doc_items:
+            # Check if this is a picture item with annotations
+            if hasattr(item, "annotations") and item.annotations:
+                for annotation in item.annotations:
+                    # Extract provenance from PictureDescriptionData annotations
+                    if PictureDescriptionData is not None and isinstance(annotation, PictureDescriptionData):
+                        if hasattr(annotation, "provenance") and annotation.provenance:
+                            provenance_values.add(annotation.provenance)
+                    # Also check for provenance attribute in other annotation types
+                    elif hasattr(annotation, "provenance") and annotation.provenance:
+                        provenance_values.add(annotation.provenance)
+    
+    if provenance_values:
+        metadata["provenance"] = sorted(list(provenance_values))
     
     # Count doc items for debugging
     if hasattr(chunk.meta, "doc_items") and chunk.meta.doc_items:
