@@ -136,14 +136,14 @@ ENV DOCLING_DOC_BATCH_SIZE=1 \
 # Max File Size: Maximum file size in bytes (104857600 = 100MB)
 # Page Range: Process specific page range, format "start-end" (e.g., "1-100") or empty for all pages
 # Document Timeout: Maximum seconds to process a document before timeout (300 = 5 minutes)
-ENV DOCLING_MAX_NUM_PAGES=1000 \
-    DOCLING_MAX_FILE_SIZE=104857600 \
+ENV DOCLING_MAX_NUM_PAGES=150 \
+    DOCLING_MAX_FILE_SIZE=10485760 \
     DOCLING_PAGE_RANGE="" \
     DOCLING_DOCUMENT_TIMEOUT=300
 
 # LAYOUT MODEL SELECTION
 # Layout Model: "heron" (default), "heron_101", "egret_medium", "egret_large", "egret_xlarge"
-ENV DOCLING_LAYOUT_MODEL=heron
+ENV DOCLING_LAYOUT_MODEL=heron_101
 
 # IMAGE GENERATION OPTIONS
 # Generate Page Images: Enable generation of full page images (increases memory usage)
